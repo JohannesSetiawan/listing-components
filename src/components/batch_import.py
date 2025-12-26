@@ -139,25 +139,109 @@ Table Schema https://example.com/#/form-data/table/group123/table456"""
                     # Show preview
                     st.success(f"✅ Found {len(parsed_components)} component(s) to import")
                     
-                    # Display preview in expandable sections
-                    with st.expander("📋 Preview Components", expanded=True):
-                        for i, comp_data in enumerate(parsed_components, 1):
-                            col1, col2, col3 = st.columns([2, 1, 1])
-                            with col1:
-                                st.markdown(f"**{i}. {comp_data['name']}**")
-                                st.caption(f"ID: `{comp_data['component_id']}`")
-                            with col2:
-                                st.markdown(f"**Category:** {comp_data['category'].value}")
-                            with col3:
-                                st.markdown(f"**Type:** {comp_data['type']}")
-                            
-                            if comp_data['description']:
-                                st.caption(f"Description: {comp_data['description']}")
-                            st.markdown("---")
-                    
-                    # Import button (outside the form)
+                    # Store in session state for editing
                     st.session_state.pending_imports = parsed_components
-                    st.session_state.show_import_confirmation = True
+                    st.session_state.show_import_preview = True
+
+def show_import_preview():
+    """Show editable preview of components before import"""
+    if 'pending_imports' in st.session_state and st.session_state.get('show_import_preview'):
+        st.markdown("---")
+        st.subheader("📝 Review and Edit Before Import")
+        st.markdown("**💡 Tip:** Double-click any cell to edit. Add descriptions or modify details before importing.**")
+        
+        # Convert to DataFrame for editing
+        import pandas as pd
+        preview_data = []
+        for comp in st.session_state.pending_imports:
+            preview_data.append({
+                'Name': comp['name'],
+                'Component ID': comp['component_id'],
+                'Type': comp['type'],
+                'Category': comp['category'].value,
+                'Change Type': comp['change_type'].value,
+                'Description': comp['description']
+            })
+        
+        df = pd.DataFrame(preview_data)
+        
+        # Get all type options
+        from src.config import VP_TYPES, EM_TYPES, DM_TYPES
+        all_types = VP_TYPES + EM_TYPES + DM_TYPES
+        
+        # Editable preview
+        edited_df = st.data_editor(
+            df,
+            use_container_width=True,
+            hide_index=True,
+            num_rows="fixed",
+            column_config={
+                "Name": st.column_config.TextColumn(
+                    "Name",
+                    help="Component name",
+                    max_chars=200,
+                    required=True
+                ),
+                "Component ID": st.column_config.TextColumn(
+                    "Component ID",
+                    help="Unique identifier",
+                    max_chars=100,
+                    required=True
+                ),
+                "Type": st.column_config.SelectboxColumn(
+                    "Type",
+                    help="Component type",
+                    options=all_types,
+                    required=True
+                ),
+                "Category": st.column_config.SelectboxColumn(
+                    "Category",
+                    help="Component category",
+                    options=["Visual Programming", "Experience Manager", "Data Manager"],
+                    required=True
+                ),
+                "Change Type": st.column_config.SelectboxColumn(
+                    "Change Type",
+                    help="New or Updated",
+                    options=["New", "Updated"],
+                    required=True
+                ),
+                "Description": st.column_config.TextColumn(
+                    "Description",
+                    help="Component description",
+                    max_chars=500
+                ),
+            }
+        )
+        
+        # Update pending imports with edited data
+        updated_imports = []
+        for idx, row in edited_df.iterrows():
+            # Map category name to Category enum
+            category_map = {
+                "Visual Programming": Category.VP,
+                "Experience Manager": Category.EM,
+                "Data Manager": Category.DM
+            }
+            
+            # Map change type to ChangeType enum
+            change_type_map = {
+                "New": ChangeType.NEW,
+                "Updated": ChangeType.UPDATED
+            }
+            
+            updated_imports.append({
+                'name': row['Name'],
+                'component_id': row['Component ID'],
+                'url_link': st.session_state.pending_imports[idx]['url_link'],  # Preserve original URL
+                'type': row['Type'],
+                'category': category_map[row['Category']],
+                'change_type': change_type_map[row['Change Type']],
+                'description': row['Description'] if pd.notna(row['Description']) else ''
+            })
+        
+        st.session_state.pending_imports = updated_imports
+        st.session_state.show_import_confirmation = True
 
 def confirm_and_import():
     """Show confirmation and execute import"""
@@ -202,6 +286,8 @@ def confirm_and_import():
                 # Clear state
                 del st.session_state.pending_imports
                 del st.session_state.show_import_confirmation
+                if 'show_import_preview' in st.session_state:
+                    del st.session_state.show_import_preview
                 st.session_state.show_batch_import = False
                 
                 st.rerun()
@@ -210,5 +296,7 @@ def confirm_and_import():
             if st.button("❌ Cancel", use_container_width=True):
                 del st.session_state.pending_imports
                 del st.session_state.show_import_confirmation
+                if 'show_import_preview' in st.session_state:
+                    del st.session_state.show_import_preview
                 st.session_state.show_batch_import = False
                 st.rerun()

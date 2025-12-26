@@ -52,6 +52,8 @@ def render_component_list(category=None, title="All Components"):
     # Show batch import if active
     if st.session_state.get('show_batch_import'):
         render_batch_import()
+        from src.components.batch_import import show_import_preview
+        show_import_preview()
         confirm_and_import()
         st.markdown("---")
     
@@ -89,6 +91,7 @@ def render_component_list(category=None, title="All Components"):
         for comp in components:
             change_badge = "🆕 New" if comp.change_type == ChangeType.NEW else "🔄 Updated"
             data.append({
+                "Select": False,
                 "Name": comp.name,
                 "URL": comp.url_link,
                 "Type": comp.type,
@@ -105,7 +108,7 @@ def render_component_list(category=None, title="All Components"):
             df = df.drop(columns=["Category"])
         
         # Display as editable table
-        st.markdown("**💡 Tip:** Double-click any cell to edit. Changes are saved automatically.**")
+        st.markdown("**💡 Tip:** Double-click any cell to edit. Check boxes to select for deletion.**")
         
         # Prepare type options based on category
         if category:
@@ -121,6 +124,11 @@ def render_component_list(category=None, title="All Components"):
             hide_index=True,
             num_rows="fixed",
             column_config={
+                "Select": st.column_config.CheckboxColumn(
+                    "Select",
+                    help="Select for deletion",
+                    default=False,
+                ),
                 "Name": st.column_config.TextColumn(
                     "Name",
                     help="Component name",
@@ -158,6 +166,41 @@ def render_component_list(category=None, title="All Components"):
                 ),
             }
         )
+        
+        # Mass delete functionality (exclude Select column from change detection)
+        comparison_df = edited_df.drop(columns=["Select"])
+        original_comparison_df = df.drop(columns=["UID", "Select"])
+        
+        if not comparison_df.equals(original_comparison_df):
+            for idx, row in edited_df.iterrows():
+                # Skip if selected for deletion
+                if row["Select"]:
+                    continue
+                    
+            st.warning(f"⚠️ {len(selected_rows)} component(s) selected for deletion")
+            
+            col1, col2 = st.columns([1, 5])
+            with col1:
+                if st.button(f"🗑️ Delete {len(selected_rows)} Selected", type="secondary", use_container_width=True):
+                    deleted_count = 0
+                    failed_count = 0
+                    
+                    for idx in selected_rows.index:
+                        uid = df.iloc[idx]["UID"]
+                        try:
+                            if db.delete_component(uid):
+                                deleted_count += 1
+                            else:
+                                failed_count += 1
+                        except Exception as e:
+                            failed_count += 1
+                    
+                    if deleted_count > 0:
+                        st.success(f"✅ Deleted {deleted_count} component(s)")
+                    if failed_count > 0:
+                        st.error(f"❌ Failed to delete {failed_count} component(s)")
+                    
+                    st.rerun()
         
         # Detect changes and update database
         if not edited_df.equals(df.drop(columns=["UID"])):
