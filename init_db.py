@@ -3,8 +3,8 @@ Database Initialization Script
 Run this script to set up the database with sample data
 """
 
-from database import db, Category, ChangeType
-from datetime import datetime, timedelta
+from src.models.component import Category, ChangeType
+from src.utils.database import db
 
 def init_database():
     """Initialize database with sample components"""
