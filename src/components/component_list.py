@@ -7,6 +7,7 @@ from src.utils.helpers import get_type_options
 from src.utils.database import db
 from src.components.component_form import render_component_form
 from src.components.component_detail import render_component_detail
+from src.components.batch_import import render_batch_import, confirm_and_import
 
 def render_component_list(category=None, title="All Components"):
     """Render list of components with filtering and pagination"""
@@ -33,12 +34,26 @@ def render_component_list(category=None, title="All Components"):
         page_size = st.selectbox("Items per page", [10, 50, 100, 1000], index=1)
         st.session_state.page_size = page_size
     
-    # Add new component button
-    if st.button("➕ Add New Component", type="primary"):
-        st.session_state.edit_mode = "new"
-        st.rerun()
+    # Add new component buttons
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        if st.button("➕ Add New Component", type="primary", use_container_width=True):
+            st.session_state.edit_mode = "new"
+            st.session_state.show_batch_import = False
+            st.rerun()
+    with col2:
+        if st.button("📦 Batch Import", use_container_width=True):
+            st.session_state.show_batch_import = True
+            st.session_state.edit_mode = None
+            st.rerun()
     
     st.markdown("---")
+    
+    # Show batch import if active
+    if st.session_state.get('show_batch_import'):
+        render_batch_import()
+        confirm_and_import()
+        st.markdown("---")
     
     # Show form if in edit/create mode
     if st.session_state.edit_mode == "new":
