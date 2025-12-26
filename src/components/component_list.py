@@ -168,41 +168,47 @@ def render_component_list(category=None, title="All Components"):
         )
         
         # Mass delete functionality
-        selected_rows = edited_df[edited_df["Select"] == True]
-        if len(selected_rows) > 0:
-            st.warning(f"⚠️ {len(selected_rows)} component(s) selected for deletion")
-            
-            col1, col2 = st.columns([1, 5])
-            with col1:
-                if st.button(f"🗑️ Delete {len(selected_rows)} Selected", type="secondary", use_container_width=True):
-                    deleted_count = 0
-                    failed_count = 0
-                    
-                    for idx in selected_rows.index:
-                        uid = df.iloc[idx]["UID"]
-                        try:
-                            if db.delete_component(uid):
-                                deleted_count += 1
-                            else:
+        if "Select" in edited_df.columns:
+            selected_rows = edited_df[edited_df["Select"] == True]
+            if len(selected_rows) > 0:
+                st.warning(f"⚠️ {len(selected_rows)} component(s) selected for deletion")
+                
+                col1, col2 = st.columns([1, 5])
+                with col1:
+                    if st.button(f"🗑️ Delete {len(selected_rows)} Selected", type="secondary", use_container_width=True):
+                        deleted_count = 0
+                        failed_count = 0
+                        
+                        for idx in selected_rows.index:
+                            uid = df.iloc[idx]["UID"]
+                            try:
+                                if db.delete_component(uid):
+                                    deleted_count += 1
+                                else:
+                                    failed_count += 1
+                            except Exception as e:
                                 failed_count += 1
-                        except Exception as e:
-                            failed_count += 1
-                    
-                    if deleted_count > 0:
-                        st.success(f"✅ Deleted {deleted_count} component(s)")
-                    if failed_count > 0:
-                        st.error(f"❌ Failed to delete {failed_count} component(s)")
-                    
-                    st.rerun()
+                        
+                        if deleted_count > 0:
+                            st.success(f"✅ Deleted {deleted_count} component(s)")
+                        if failed_count > 0:
+                            st.error(f"❌ Failed to delete {failed_count} component(s)")
+                        
+                        st.rerun()
         
         # Detect changes and update database (exclude Select column from change detection)
-        comparison_df = edited_df.drop(columns=["Select"])
-        original_comparison_df = df.drop(columns=["UID", "Select"])
+        comparison_columns = ["Select"] if "Select" in edited_df.columns else []
+        if comparison_columns:
+            comparison_df = edited_df.drop(columns=comparison_columns)
+            original_comparison_df = df.drop(columns=["UID"] + comparison_columns)
+        else:
+            comparison_df = edited_df
+            original_comparison_df = df.drop(columns=["UID"])
         
         if not comparison_df.equals(original_comparison_df):
             for idx, row in edited_df.iterrows():
                 # Skip if selected for deletion
-                if row["Select"]:
+                if "Select" in row and row["Select"]:
                     continue
                     
                 original_row = df.iloc[idx]
