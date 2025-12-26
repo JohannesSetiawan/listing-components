@@ -90,7 +90,7 @@ def render_component_list(category=None, title="All Components"):
             change_badge = "🆕 New" if comp.change_type == ChangeType.NEW else "🔄 Updated"
             data.append({
                 "Name": comp.name,
-                "Component ID": comp.component_id,
+                "URL": comp.url_link,
                 "Type": comp.type,
                 "Category": comp.category.value if category is None else "",
                 "Change": change_badge,
@@ -107,6 +107,14 @@ def render_component_list(category=None, title="All Components"):
         # Display as editable table
         st.markdown("**💡 Tip:** Double-click any cell to edit. Changes are saved automatically.**")
         
+        # Prepare type options based on category
+        if category:
+            type_options = get_type_options(category)
+        else:
+            # For Master List, get all types from all categories
+            from src.config import VP_TYPES, EM_TYPES, DM_TYPES
+            type_options = VP_TYPES + EM_TYPES + DM_TYPES
+        
         edited_df = st.data_editor(
             df.drop(columns=["UID"]),
             use_container_width=True,
@@ -119,18 +127,24 @@ def render_component_list(category=None, title="All Components"):
                     max_chars=200,
                     required=True
                 ),
-                "Component ID": st.column_config.TextColumn(
-                    "Component ID",
-                    help="Unique identifier",
-                    max_chars=100,
+                "URL": st.column_config.LinkColumn(
+                    "URL",
+                    help="Direct link to the component",
+                    max_chars=500,
                     required=True
                 ),
                 "Type": st.column_config.SelectboxColumn(
                     "Type",
                     help="Component type",
-                    options=get_type_options(category) if category else [],
+                    options=type_options,
                     required=True
                 ),
+                "Category": st.column_config.SelectboxColumn(
+                    "Category",
+                    help="Component category",
+                    options=["Visual Programming", "Experience Manager", "Data Manager"],
+                    required=True
+                ) if category is None else None,
                 "Change": st.column_config.SelectboxColumn(
                     "Change",
                     help="Change type",
@@ -159,12 +173,23 @@ def render_component_list(category=None, title="All Components"):
                     update_data["name"] = row["Name"]
                     changes_detected = True
                 
-                if row["Component ID"] != original_row["Component ID"]:
-                    update_data["component_id"] = row["Component ID"]
+                if row["URL"] != original_row["URL"]:
+                    update_data["url_link"] = row["URL"]
                     changes_detected = True
                 
                 if row["Type"] != original_row["Type"]:
                     update_data["type"] = row["Type"]
+                    changes_detected = True
+                
+                # Handle category change (only on Master List)
+                if category is None and "Category" in row and row["Category"] != original_row["Category"]:
+                    # Map category name to Category enum
+                    category_map = {
+                        "Visual Programming": Category.VP,
+                        "Experience Manager": Category.EM,
+                        "Data Manager": Category.DM
+                    }
+                    update_data["category"] = category_map.get(row["Category"], Category.VP)
                     changes_detected = True
                 
                 if row["Change"] != original_row["Change"]:
