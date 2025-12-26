@@ -50,7 +50,18 @@ class Component(Base):
 
 class Database:
     def __init__(self):
-        db_url = os.getenv('DB_URL', 'sqlite:///deploytrack.db')
+        # For Streamlit Cloud, check secrets first, then .env
+        db_url = None
+        try:
+            import streamlit as st
+            if hasattr(st, 'secrets') and 'DB_URL' in st.secrets:
+                db_url = st.secrets['DB_URL']
+        except:
+            pass
+        
+        if not db_url:
+            db_url = os.getenv('DB_URL', 'sqlite:///deploytrack.db')
+        
         self.engine = create_engine(db_url)
         Base.metadata.create_all(self.engine)
         self.SessionLocal = sessionmaker(bind=self.engine)
