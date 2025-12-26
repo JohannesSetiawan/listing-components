@@ -167,16 +167,9 @@ def render_component_list(category=None, title="All Components"):
             }
         )
         
-        # Mass delete functionality (exclude Select column from change detection)
-        comparison_df = edited_df.drop(columns=["Select"])
-        original_comparison_df = df.drop(columns=["UID", "Select"])
-        
-        if not comparison_df.equals(original_comparison_df):
-            for idx, row in edited_df.iterrows():
-                # Skip if selected for deletion
-                if row["Select"]:
-                    continue
-                    
+        # Mass delete functionality
+        selected_rows = edited_df[edited_df["Select"] == True]
+        if len(selected_rows) > 0:
             st.warning(f"⚠️ {len(selected_rows)} component(s) selected for deletion")
             
             col1, col2 = st.columns([1, 5])
@@ -202,9 +195,16 @@ def render_component_list(category=None, title="All Components"):
                     
                     st.rerun()
         
-        # Detect changes and update database
-        if not edited_df.equals(df.drop(columns=["UID"])):
+        # Detect changes and update database (exclude Select column from change detection)
+        comparison_df = edited_df.drop(columns=["Select"])
+        original_comparison_df = df.drop(columns=["UID", "Select"])
+        
+        if not comparison_df.equals(original_comparison_df):
             for idx, row in edited_df.iterrows():
+                # Skip if selected for deletion
+                if row["Select"]:
+                    continue
+                    
                 original_row = df.iloc[idx]
                 uid = original_row["UID"]
                 
