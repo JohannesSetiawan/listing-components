@@ -94,7 +94,7 @@ def render_component_list(category=None, title="All Components"):
                 "Type": comp.type,
                 "Category": comp.category.value if category is None else "",
                 "Change": change_badge,
-                "Updated": comp.updated_at.strftime('%Y-%m-%d %H:%M'),
+                "Description": comp.description if comp.description else "",
                 "UID": comp.uid
             })
         
@@ -104,12 +104,84 @@ def render_component_list(category=None, title="All Components"):
         if category:
             df = df.drop(columns=["Category"])
         
-        # Display as interactive table
-        st.dataframe(
+        # Display as editable table
+        st.markdown("**💡 Tip:** Double-click any cell to edit. Changes are saved automatically.**")
+        
+        edited_df = st.data_editor(
             df.drop(columns=["UID"]),
             use_container_width=True,
-            hide_index=True
+            hide_index=True,
+            num_rows="fixed",
+            column_config={
+                "Name": st.column_config.TextColumn(
+                    "Name",
+                    help="Component name",
+                    max_chars=200,
+                    required=True
+                ),
+                "Component ID": st.column_config.TextColumn(
+                    "Component ID",
+                    help="Unique identifier",
+                    max_chars=100,
+                    required=True
+                ),
+                "Type": st.column_config.SelectboxColumn(
+                    "Type",
+                    help="Component type",
+                    options=get_type_options(category) if category else [],
+                    required=True
+                ),
+                "Change": st.column_config.SelectboxColumn(
+                    "Change",
+                    help="Change type",
+                    options=["🆕 New", "🔄 Updated"],
+                    required=True
+                ),
+                "Description": st.column_config.TextColumn(
+                    "Description",
+                    help="Component description",
+                    max_chars=500
+                ),
+            }
         )
+        
+        # Detect changes and update database
+        if not edited_df.equals(df.drop(columns=["UID"])):
+            for idx, row in edited_df.iterrows():
+                original_row = df.iloc[idx]
+                uid = original_row["UID"]
+                
+                # Check if this row was modified
+                changes_detected = False
+                update_data = {}
+                
+                if row["Name"] != original_row["Name"]:
+                    update_data["name"] = row["Name"]
+                    changes_detected = True
+                
+                if row["Component ID"] != original_row["Component ID"]:
+                    update_data["component_id"] = row["Component ID"]
+                    changes_detected = True
+                
+                if row["Type"] != original_row["Type"]:
+                    update_data["type"] = row["Type"]
+                    changes_detected = True
+                
+                if row["Change"] != original_row["Change"]:
+                    update_data["change_type"] = ChangeType.NEW if row["Change"] == "🆕 New" else ChangeType.UPDATED
+                    changes_detected = True
+                
+                if row["Description"] != original_row["Description"]:
+                    update_data["description"] = row["Description"]
+                    changes_detected = True
+                
+                # Update database if changes detected
+                if changes_detected:
+                    try:
+                        db.update_component(uid, update_data)
+                        st.toast(f"✅ Updated: {row['Name']}", icon="✅")
+                    except Exception as e:
+                        st.error(f"Error updating {row['Name']}: {str(e)}")
         
         # Component selection for detail view
         st.markdown("---")
