@@ -57,17 +57,30 @@ def render_find_dm_links():
     # Load the ID to tablegroup mapping
     id_to_tablegroup = load_id_to_tablegroup_mapping()
     
+    # Initialize session state for JSON input
+    if 'dm_links_json_input' not in st.session_state:
+        st.session_state.dm_links_json_input = ""
+    
     # JSON input area
     st.subheader("📥 Input JSON")
     json_input = st.text_area(
         "Paste your JSON content here:",
+        value=st.session_state.dm_links_json_input,
         height=300,
-        placeholder='{\n  "form_data_id": "example_id",\n  "nested": {\n    "form_data_id": "another_id"\n  }\n}'
+        placeholder='{\n  "form_data_id": "example_id",\n  "nested": {\n    "form_data_id": "another_id"\n  }\n}',
+        key="dm_links_text_area"
     )
     
-    col1, col2 = st.columns([1, 4])
+    # Update session state when text changes
+    st.session_state.dm_links_json_input = json_input
+    
+    col1, col2, col3 = st.columns([1, 1, 3])
     with col1:
         process_btn = st.button("🔍 Extract Links", type="primary")
+    with col2:
+        if st.button("🗑️ Clear"):
+            st.session_state.dm_links_json_input = ""
+            st.rerun()
     
     if process_btn and json_input.strip():
         try:
