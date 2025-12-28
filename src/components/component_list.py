@@ -98,8 +98,7 @@ def render_component_list(category=None, title="All Components"):
                 "Category": comp.category.value if category is None else "",
                 "Change": change_badge,
                 "Description": comp.description if comp.description else "",
-                "UID": comp.uid,
-                "_index": comp.uid
+                "UID": comp.uid
             })
         
         df = pd.DataFrame(data)
