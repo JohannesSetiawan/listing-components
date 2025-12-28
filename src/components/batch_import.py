@@ -150,31 +150,33 @@ def show_import_preview():
         st.subheader("📝 Review and Edit Before Import")
         st.markdown("**💡 Tip:** Double-click any cell to edit. Add descriptions or modify details before importing.**")
         
-        # Convert to DataFrame for editing
+        # Convert to DataFrame for editing (only initialize once)
         import pandas as pd
-        preview_data = []
-        for comp in st.session_state.pending_imports:
-            preview_data.append({
-                'Name': comp['name'],
-                'Component ID': comp['component_id'],
-                'Type': comp['type'],
-                'Category': comp['category'].value,
-                'Change Type': comp['change_type'].value,
-                'Description': comp['description']
-            })
         
-        df = pd.DataFrame(preview_data)
+        if 'import_preview_df' not in st.session_state:
+            preview_data = []
+            for comp in st.session_state.pending_imports:
+                preview_data.append({
+                    'Name': comp['name'],
+                    'Component ID': comp['component_id'],
+                    'Type': comp['type'],
+                    'Category': comp['category'].value,
+                    'Change Type': comp['change_type'].value,
+                    'Description': comp['description']
+                })
+            st.session_state.import_preview_df = pd.DataFrame(preview_data)
         
         # Get all type options
         from src.config import VP_TYPES, EM_TYPES, DM_TYPES
         all_types = VP_TYPES + EM_TYPES + DM_TYPES
         
-        # Editable preview
+        # Editable preview with key to maintain state
         edited_df = st.data_editor(
-            df,
+            st.session_state.import_preview_df,
             use_container_width=True,
             hide_index=True,
             num_rows="fixed",
+            key="import_data_editor",
             column_config={
                 "Name": st.column_config.TextColumn(
                     "Name",
@@ -214,33 +216,8 @@ def show_import_preview():
             }
         )
         
-        # Update pending imports with edited data
-        updated_imports = []
-        for idx, row in edited_df.iterrows():
-            # Map category name to Category enum
-            category_map = {
-                "Visual Programming": Category.VP,
-                "Experience Manager": Category.EM,
-                "Data Manager": Category.DM
-            }
-            
-            # Map change type to ChangeType enum
-            change_type_map = {
-                "New": ChangeType.NEW,
-                "Updated": ChangeType.UPDATED
-            }
-            
-            updated_imports.append({
-                'name': row['Name'],
-                'component_id': row['Component ID'],
-                'url_link': st.session_state.pending_imports[idx]['url_link'],  # Preserve original URL
-                'type': row['Type'],
-                'category': category_map[row['Category']],
-                'change_type': change_type_map[row['Change Type']],
-                'description': row['Description'] if pd.notna(row['Description']) else ''
-            })
-        
-        st.session_state.pending_imports = updated_imports
+        # Update the stored dataframe
+        st.session_state.import_preview_df = edited_df
         st.session_state.show_import_confirmation = True
 
 def confirm_and_import():
@@ -252,6 +229,39 @@ def confirm_and_import():
         
         with col1:
             if st.button("✅ Confirm Import", type="primary", use_container_width=True):
+                import pandas as pd
+                
+                # Build updated imports from the edited dataframe
+                updated_imports = []
+                edited_df = st.session_state.get('import_preview_df')
+                
+                if edited_df is not None:
+                    for idx, row in edited_df.iterrows():
+                        # Map category name to Category enum
+                        category_map = {
+                            "Visual Programming": Category.VP,
+                            "Experience Manager": Category.EM,
+                            "Data Manager": Category.DM
+                        }
+                        
+                        # Map change type to ChangeType enum
+                        change_type_map = {
+                            "New": ChangeType.NEW,
+                            "Updated": ChangeType.UPDATED
+                        }
+                        
+                        updated_imports.append({
+                            'name': row['Name'],
+                            'component_id': row['Component ID'],
+                            'url_link': st.session_state.pending_imports[idx]['url_link'],  # Preserve original URL
+                            'type': row['Type'],
+                            'category': category_map[row['Category']],
+                            'change_type': change_type_map[row['Change Type']],
+                            'description': row['Description'] if pd.notna(row['Description']) else ''
+                        })
+                else:
+                    updated_imports = st.session_state.pending_imports
+                
                 success_count = 0
                 error_count = 0
                 errors = []
@@ -259,16 +269,16 @@ def confirm_and_import():
                 progress_bar = st.progress(0)
                 status_text = st.empty()
                 
-                for i, comp_data in enumerate(st.session_state.pending_imports):
+                for i, comp_data in enumerate(updated_imports):
                     try:
                         db.create_component(comp_data)
                         success_count += 1
-                        status_text.text(f"Importing {i+1}/{len(st.session_state.pending_imports)}: {comp_data['name']}")
+                        status_text.text(f"Importing {i+1}/{len(updated_imports)}: {comp_data['name']}")
                     except Exception as e:
                         error_count += 1
                         errors.append(f"{comp_data['name']}: {str(e)}")
                     
-                    progress_bar.progress((i + 1) / len(st.session_state.pending_imports))
+                    progress_bar.progress((i + 1) / len(updated_imports))
                 
                 progress_bar.empty()
                 status_text.empty()
@@ -288,6 +298,8 @@ def confirm_and_import():
                 del st.session_state.show_import_confirmation
                 if 'show_import_preview' in st.session_state:
                     del st.session_state.show_import_preview
+                if 'import_preview_df' in st.session_state:
+                    del st.session_state.import_preview_df
                 st.session_state.show_batch_import = False
                 
                 st.rerun()
@@ -298,5 +310,7 @@ def confirm_and_import():
                 del st.session_state.show_import_confirmation
                 if 'show_import_preview' in st.session_state:
                     del st.session_state.show_import_preview
+                if 'import_preview_df' in st.session_state:
+                    del st.session_state.import_preview_df
                 st.session_state.show_batch_import = False
                 st.rerun()
