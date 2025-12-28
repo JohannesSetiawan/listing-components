@@ -1,7 +1,6 @@
 """Sidebar component"""
 
 import streamlit as st
-from datetime import datetime
 from src.utils.database import db
 
 def render_sidebar():
@@ -24,16 +23,5 @@ def render_sidebar():
         st.markdown("---")
         
         st.info("**DeployTrack Low-Code**\n\nTrack and manage deployment components across your low-code ecosystem.")
-        
-        # API Test
-        st.markdown("---")
-        if st.button("🧪 Test API"):
-            response = {
-                "message": "Hello World!",
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "status": "success",
-                "total_components": db.get_all_components(limit=1)[1]
-            }
-            st.json(response)
     
     return page
