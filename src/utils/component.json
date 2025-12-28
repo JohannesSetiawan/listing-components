@@ -1,0 +1,1467 @@
+{
+    "id": "uTRqAinDR",
+    "name": "[DJob] Validate Sharing Cost & Budget Log",
+    "description": "Request format: {\n  \"accrue_trx_type\": \"Reverse\" or \"Topup\",\n  \"accrue_trx_record\": Accrue Reverse or Topup,\n  \"is_trigger_activate\": true for activate trigger,\n  \"accrue_monitoring\": Accrue Monitoring,\n}",
+    "is_active": true,
+    "is_sync": false,
+    "disable_run_history": false,
+    "trigger": {
+        "id": "uTR30invRz",
+        "type": "dedicated_job",
+        "form": {
+            "event": "",
+            "tablegroup_id": "",
+            "form_data_id": "",
+            "form_data_name": ""
+        },
+        "scheduler": {},
+        "webhook": {
+            "method": "",
+            "url": ""
+        },
+        "api": {
+            "method": "",
+            "url": ""
+        },
+        "webhook_v2": {
+            "method": "",
+            "url": ""
+        },
+        "api_v2": {
+            "method": "",
+            "url": ""
+        },
+        "job": {
+            "name": ""
+        },
+        "dedicated_job": {
+            "name": "djob_validate_sharing_cost_and_budget_log",
+            "counter_total": 0
+        },
+        "container_variable": "req",
+        "container_response": "",
+        "event": {
+            "name": ""
+        },
+        "function": {
+            "name": ""
+        }
+    },
+    "actions": [
+        {
+            "id": "myx4xmnvR",
+            "type": "javascript",
+            "tablegroup_id": "",
+            "form_data_id": "",
+            "filter": null,
+            "new_filter": null,
+            "sort": null,
+            "page": "",
+            "is_async": false,
+            "is_disable": false,
+            "limit": "",
+            "data": null,
+            "form_data": null,
+            "container_variable": "prepareData",
+            "compress_file_base64": null,
+            "compress_file_multiple_url": null,
+            "compress_file_company_drive": null,
+            "javascript": "var trxSharingCostRecords = []; // from accrue_trx\r\nvar budgetLogRecords = []; // from accrue_monitoring\r\nvar monitoringSharingCostRecords = []; // from accrue_monitoring\r\nvar monitoringSharingCostRecordsIndexed = {};\r\nvar duplicateMonitoringSharingCostIds = [];\r\nvar budgetLogRefId = String(req.accrue_trx_record.id_key);\r\n\r\ntry {\r\n  // ------query trx sharing cost records------\r\n  if(req.accrue_trx_type == \"Reverse\") {\r\n      // find records in t_accrue_closing_sharing_cost (7DadM1oVR)\r\n      var filter = {\r\n      _filter_version: 2,\r\n        where_is_and: {\r\n          \"accrue_closing_id.id\": req.accrue_trx_record.id,\r\n        },\r\n        where_gt_and: { // only fetch sharing cost with amount > 0\r\n          \"amount_origin_closing\": 0,\r\n        }\r\n      };\r\n\r\n      var sort = { created_at: -1 };\r\n      var trxSharingCostRecords = _findRecords(\"7DadM1oVR\", 1, 9999999999, sort, filter, \"and\") || [];\r\n  } else if(req.accrue_trx_type == \"Topup\") {\r\n      // find records in t_accrue_topup_sharing_cost (yp3mUtD4R)\r\n      var filter = {\r\n      _filter_version: 2,\r\n        where_is_and: {\r\n          \"accrue_topup_id.id\": req.accrue_trx_record.id,\r\n        },\r\n        where_gt_and: { // only fetch sharing cost with amount > 0\r\n          \"amount_origin_topup\": 0,\r\n        }\r\n      };\r\n\r\n      var sort = { created_at: -1 };\r\n      var trxSharingCostRecords = _findRecords(\"yp3mUtD4R\", 1, 9999999999, sort, filter, \"and\") || [];\r\n  } else {\r\n      _log(\"Error: Transaction Type Unknown = \" + req.accrue_trx_type);\r\n      _stopAutomation();\r\n  }\r\n\r\n  // ------query budget log records in accrue_monitoring------\r\n  // find records in t_accrue_monitoring_budget_log (4R_Ufhv4R)\r\n  var filter = {\r\n  _filter_version: 2,\r\n    where_is_and: {\r\n      \"accrue_monitoring_id.id\": req.accrue_monitoring.id,\r\n      \"id_key\": budgetLogRefId,\r\n      \"transaction_type\": \"Accrue \" + req.accrue_trx_type,\r\n    },\r\n  };\r\n\r\n  var sort = { created_at: -1 };\r\n  var budgetLogRecords = _findRecords(\"4R_Ufhv4R\", 1, 9999999999, sort, filter, \"and\") || [];\r\n\r\n  if(req.is_trigger_activate) {\r\n    // ------query sharing cost records in accrue_monitoring------\r\n    // find records in t_accrue_monitoring_sharing_cost (mrlgy-D4g)\r\n    var filter = {\r\n    _filter_version: 2,\r\n      where_is_and: {\r\n        \"accrue_monitoring_id.id\": req.accrue_monitoring.id,\r\n      },\r\n    };\r\n\r\n    var sort = { created_at: -1 };\r\n    var monitoringSharingCostRecords = _findRecords(\"mrlgy-D4g\", 1, 9999999999, sort, filter, \"and\") || [];\r\n    _log(\"Total Sharing Cost Records in Monitoring: \" + monitoringSharingCostRecords.length);\r\n\r\n    // indexing and checking duplicate of monitoring sharing costs\r\n    monitoringSharingCostRecords.forEach(function(sharingCost) {\r\n      // sc index format: {Expense RC Code ID}^{Expense SL ID}\r\n      var scIndex = sharingCost.expense_rc_code.id + \"^\" + sharingCost.expense_sub_ledger.id;\r\n      if(monitoringSharingCostRecordsIndexed.hasOwnProperty(scIndex)) {\r\n        // push to duplicate if key exist\r\n        duplicateMonitoringSharingCostIds.push(sharingCost.id);\r\n      } else {\r\n        // push to indexed hash map if key does not exist\r\n        monitoringSharingCostRecordsIndexed[scIndex] = sharingCost;\r\n      }\r\n    });\r\n  }\r\n  \r\n} catch(error) {\r\n  _log(\"Error when fetching required data: \" + error);\r\n  _stopAutomation();\r\n}\r\n\r\n// data logging\r\n_log(\"Total Trx Sharing Cost Records: \" + trxSharingCostRecords.length);\r\n_log(\"Total Monitoring Sharing Cost Records: \" + monitoringSharingCostRecords.length);\r\n_log(\"Total Budget Log Records: \" + budgetLogRecords.length);\r\n\r\n// indexing budgetLogRecords (for efficient search processes) and accumulating cost center ids\r\nvar costCenterIds = [];\r\n_log({\r\n  \"costCenterIds\": costCenterIds,\r\n});\r\nvar budgetLogRecordsIndexed = {};\r\n\r\nbudgetLogRecords.forEach(function(budgetLogRecord) {\r\n  costCenterIds.push(budgetLogRecord.costcenter_id.id);\r\n  // indexing by its costcenter_id.id\r\n  budgetLogRecordsIndexed[budgetLogRecord.costcenter_id.id] = budgetLogRecord;\r\n});\r\n\r\n// query cost centers\r\n// find records in t_master_costcenter (x_iHGhz4R)\r\nvar filter = {\r\n_filter_version: 2,\r\n  where_in_and: {\r\n    // costCenterIds was filtered for only this accrue trx id_key, cause it is from filtered budget log records\r\n    \"id_master_costcenter\": costCenterIds,\r\n  },\r\n};\r\n\r\nvar sort = { created_at: -1 };\r\nvar costCenters = _findRecords(\"x_iHGhz4R\", 1, 9999999999, sort, filter, \"and\") || [];\r\n\r\n// map id of costCenters/indexing (for efficient search processes)\r\nvar costCenterIndexed = {};\r\nvar duplicateBudgetLogIds = [];\r\ncostCenters.forEach(function(costCenter) {\r\n  // index format: {RC Code}^{Sub Ledger}\r\n  var costCenterIndex = costCenter.division.id + \"^\" + costCenter.sub_ledger.id;\r\n  if(costCenterIndexed.hasOwnProperty(costCenterIndex)) { // push to duplicate if key exists previously\r\n    var relatedBudgetLog = budgetLogRecordsIndexed[costCenter.id];\r\n    duplicateBudgetLogIds.push(relatedBudgetLog.id);\r\n  } else {\r\n    costCenterIndexed[costCenterIndex] = costCenter;\r\n  }\r\n});\r\n\r\n// logging indexed maps (disable this log on load testing and production ready)\r\n// _log({\r\n//   \"budgetLogRecordsIndexed\": budgetLogRecordsIndexed,\r\n//   \"duplicateBudgetLogIds\": duplicateBudgetLogIds,\r\n//   \"costCenterIndexed\": costCenterIndexed,\r\n// });",
+            "conditional": {
+                "query": "",
+                "action_true": null,
+                "action_false": null
+            },
+            "while": {
+                "variable_source": "",
+                "action_while": null,
+                "action_done": null
+            },
+            "external_api": {
+                "method": "",
+                "url": "",
+                "body": "",
+                "header": null
+            },
+            "send_notification": {
+                "user_company_ids": "",
+                "apps": "",
+                "type": "",
+                "heading": "",
+                "content": "",
+                "is_custom_redirect": false,
+                "script_redirect": "",
+                "variable_redirect": ""
+            },
+            "sum_formdata": {
+                "filter": null,
+                "column": ""
+            },
+            "data_connection": {
+                "query": "",
+                "connection": "",
+                "do": ""
+            },
+            "job": {
+                "name": "",
+                "input": ""
+            },
+            "dedicated_job": {
+                "name": "",
+                "input": "",
+                "counter_variable": ""
+            },
+            "function": {
+                "name": "",
+                "input": ""
+            },
+            "timeout_millisecond": 0,
+            "is_disable_log": false
+        },
+        {
+            "id": "9SbXwi7vR",
+            "type": "javascript",
+            "tablegroup_id": "",
+            "form_data_id": "",
+            "filter": null,
+            "new_filter": null,
+            "sort": null,
+            "page": "",
+            "is_async": false,
+            "is_disable": false,
+            "limit": "",
+            "data": null,
+            "form_data": null,
+            "container_variable": "validation_process",
+            "compress_file_base64": null,
+            "compress_file_multiple_url": null,
+            "compress_file_company_drive": null,
+            "javascript": "// Prepared data:\r\n// - trxSharingCostRecords(Array): All records of Sharing Cost in Transaction\r\n// - monitoringSharingCostRecords(Array): All records of Sharing Cost in Monitoring\r\n// - monitoringSharingCostRecordsIndexed(Obj): Records in monitoringSharingCostRecords mapped with its {Expense RC Code ID}^{Expense SL ID}\r\n// - budgetLogRecords(Array): All records of Budget Log in Accrue Monitoring\r\n// - budgetLogRecordsIndexed(Obj): Records in budgetLogRecords mapped with its costcenter_id.id\r\n// - costCenterIndexed(Obj): Key-value pair of {RC Code ID}^{Sub Ledger ID}: Cost Center Record\r\n// - duplicateBudgetLogIds(Array): ID of duplicate budget logs in Accrue Monitoring\r\n// - duplicateMonitoringSharingCostIds(Array): ID of duplicate sharing costs in Accrue Monitoring\r\n\r\n// define vars to store budget log and sharing cost ids for bulk status and flag update\r\nvar needRevisionBudgetLogIds = [];\r\nvar needRevisionSharingCostIds = [];\r\n\r\n// define var to store budget log sharing cost that will be regenerated due to missing processes\r\nvar regenerateBudgetLog = [];\r\nvar regenerateSharingCost = [];\r\n\r\n// define valid log activity\r\nvar validLogActivity = null;\r\nif(req.accrue_trx_type === \"Reverse\") {\r\n    validLogActivity = \"Transfer out\";\r\n} else if(req.accrue_trx_type === \"Topup\") {\r\n    validLogActivity = \"Transfer in\";\r\n}\r\n\r\n// define valid log detail (field name budget_log)\r\nvar validLogDetail = \"Reserve\";\r\nif(req.is_trigger_activate) {\r\n    validLogDetail = \"Consume\";\r\n}\r\n\r\n// main looping and validation logic (per trx sharing cost)\r\ntrxSharingCostRecords.forEach(function(trxSharingCost) {\r\n    // check if budget logs exist\r\n    var budgetLog = null;\r\n    var costCenterIndex = trxSharingCost.expense_rc_code.id + \"^\" + trxSharingCost.expense_sub_ledger.id;\r\n    var costCenterRecord = {};\r\n    try {\r\n        costCenterRecord = costCenterIndexed[costCenterIndex];\r\n        var costCenterId = costCenterRecord.id;\r\n        budgetLog = budgetLogRecordsIndexed[costCenterId];\r\n    } catch(error) { // budget log might be missing\r\n        _log(\"Error while fetching budget log \" + costCenterIndex +  \": \" + error);\r\n    }\r\n\r\n    // regenerate buget log if missing\r\n    if(budgetLog === null) {\r\n        var remaining_budget = req.accrue_monitoring.remaining_budget;\r\n        var transactionAmount = {};\r\n        var transactionAmountNumber = 0;\r\n\r\n        if(req.accrue_trx_type === \"Reverse\") {\r\n            transactionAmount = {\r\n                \"convertion_amount\": -trxSharingCost.currency.convertion_amount,\r\n                \"origin_amount\": -trxSharingCost.currency.origin_amount || 0,\r\n                \"origin_currency\": trxSharingCost.currency.origin_currency,\r\n                \"rate\": trxSharingCost.currency.rate,\r\n                \"target_currency\": trxSharingCost.currency.target_currency\r\n            }\r\n            transactionAmountNumber = -trxSharingCost.currency.origin_amount || 0;\r\n        } else if(req.accrue_trx_type === \"Topup\") {\r\n            transactionAmount = {\r\n                \"convertion_amount\": trxSharingCost.currency.convertion_amount,\r\n                \"origin_amount\": trxSharingCost.currency.origin_amount || 0,\r\n                \"origin_currency\": trxSharingCost.currency.origin_currency,\r\n                \"rate\": trxSharingCost.currency.rate,\r\n                \"target_currency\": trxSharingCost.currency.target_currency\r\n            }\r\n            transactionAmountNumber = trxSharingCost.currency.origin_amount || 0;\r\n        }\r\n\r\n        var newBudgetLog = {\r\n            \"accrue_monitoring_id\": req.accrue_monitoring.id,\r\n            \"accrue_sub_ledger\": trxSharingCost.accrue_sub_ledger,\r\n            \"budget_log\": validLogDetail,\r\n            \"budget_remaining\": remaining_budget,\r\n            \"costcenter_id\": costCenterRecord,\r\n            \"description\": req.description,\r\n            \"id_key\": budgetLogRefId,\r\n            \"initiator\": req.initiator,\r\n            \"log_activity\": validLogActivity,\r\n            \"origin_currency\": req.accrue_monitoring.currency.target_currency,\r\n            \"rc_code_owner\": req.accrue_monitoring.rc_code_owner,\r\n            \"request_no\": req.accrue_trx_record.request_no,\r\n            \"title\": req.accrue_trx_record.title,\r\n            \"transaction_amount\": transactionAmountNumber,\r\n            \"transaction_amount_mcx\": transactionAmount,\r\n            \"transaction_date\": Date.now(),\r\n            \"transaction_type\": \"Accrue \" + req.accrue_trx_type,\r\n        }\r\n\r\n        regenerateBudgetLog.push(newBudgetLog);\r\n    } else { // validate fetched budget log\r\n        var isBudgetLogNeedRevision = false;\r\n\r\n        // check log activity\r\n        if(budgetLog.log_activity != validLogActivity) {\r\n            isBudgetLogNeedRevision = true;\r\n        }\r\n\r\n        // check log detail\r\n        if((!isBudgetLogNeedRevision) && budgetLog.budget_log != validLogDetail) {\r\n            isBudgetLogNeedRevision = true;\r\n        }\r\n\r\n        // check amount\r\n        if((!isBudgetLogNeedRevision) && Math.abs(budgetLog.transaction_amount_mcx.origin_amount || 0) != Math.abs(trxSharingCost.currency.origin_amount || 0)) {\r\n            isBudgetLogNeedRevision = true;\r\n        }\r\n\r\n        if(isBudgetLogNeedRevision) { // push invalid budget log to need revision\r\n            needRevisionBudgetLogIds.push(budgetLog.id);\r\n        }\r\n    }\r\n\r\n    if(req.is_trigger_activate) {\r\n        // check if sharing costs exist in monitoring\r\n        var sharingCost = null;\r\n        var scIndex = trxSharingCost.expense_rc_code.id + \"^\" + trxSharingCost.expense_sub_ledger.id;\r\n        try {\r\n            sharingCost = monitoringSharingCostRecordsIndexed[scIndex];\r\n        } catch(error) { // sharing cost might be missing\r\n            _log(\"Error while fetching sharing cost \" + scIndex +  \": \" + error);\r\n        }\r\n\r\n        // regenerate sharing cost if missing\r\n        if(sharingCost === null) {\r\n            var parent_currency = trxSharingCost.currency || {};\r\n            var reqAmount = 0;\r\n            if(req.accrue_trx_type === \"Reverse\") {\r\n                reqAmount = trxSharingCost.currency.origin_amount || 0;\r\n            } else if(req.accrue_trx_type === \"Topup\") {\r\n                reqAmount = -trxSharingCost.currency.origin_amount || 0;\r\n            }\r\n            var currency = sharingCost.currency ||\r\n                {\r\n                    \"convertion_amount\": 0,\r\n                    \"origin_amount\": 0,\r\n                    \"origin_currency\": parent_currency.origin_currency,\r\n                    \"rate\": parent_currency.rate,\r\n                    \"target_currency\": parent_currency.target_currency\r\n                };\r\n\r\n            currency.rate = parent_currency.rate;\r\n            currency.origin_currency = parent_currency.origin_currency;\r\n            currency.target_currency = parent_currency.target_currency;\r\n\r\n            currency.origin_amount -= reqAmount;\r\n            currency.convertion_amount = currency.origin_amount * currency.rate;\r\n\r\n            sharingCost.exchange_rate = currency.rate;\r\n            sharingCost.origin_currency = currency.origin_currency;\r\n            sharingCost.target_currency = currency.target_currency;\r\n\r\n            sharingCost.currency = currency;\r\n            sharingCost.amount_origin = currency.origin_amount;\r\n            sharingCost.amount = currency.convertion_amount;\r\n            sharingCost.remaining_budget = currency.convertion_amount;\r\n\r\n            sharingCost.expense_rc_code = trxSharingCost.expense_rc_code;\r\n            sharingCost.expense_sub_ledger = trxSharingCost.expense_sub_ledger;\r\n\r\n            sharingCost.accrue_monitoring_id = {\r\n                id: req.accrue_monitoring.id,\r\n                name: req.accrue_monitoring.title\r\n            };\r\n            sharingCost.accrue_code = trxSharingCost.accrue_code;\r\n            sharingCost.accrue_sub_ledger = trxSharingCost.accrue_sub_ledger;\r\n\r\n            var newSharingCost = {\r\n                \"accrue_code\": req.accrue_monitoring.request_no,\r\n                \"accrue_monitoring_id\": sharingCost.accrue_monitoring_id,\r\n                \"accrue_sub_ledger\": sharingCost.accrue_sub_ledger,\r\n                \"amount\": sharingCost.amount,\r\n                \"amount_origin\": Number(sharingCost.amount_origin.toFixed(2)),\r\n                \"currency\": sharingCost.currency,\r\n                \"description\": trxSharingCost.description,\r\n                \"exchange_rate\": sharingCost.exchange_rate,\r\n                \"expense_rc_code\": sharingCost.expense_rc_code,\r\n                \"expense_sub_ledger\": sharingCost.expense_sub_ledger,\r\n                \"id_key\": req.accrue_monitoring.id_key,\r\n                \"origin_currency\": sharingCost.origin_currency,\r\n                \"rc_code_owner\": req.accrue_monitoring.rc_code_owner,\r\n                \"remaninig_budget\": sharingCost.remaninig_budget,\r\n                \"target_currency\": sharingCost.target_currency\r\n            };\r\n\r\n            regenerateSharingCost.push(newSharingCost);\r\n        } else { // validate fetched sharing cost\r\n            var isSharingCostNeedRevision = false;\r\n\r\n            // check accrue sub ledger\r\n            if(sharingCost.accrue_sub_ledger.id != trxSharingCost.accrue_sub_ledger.id) {\r\n                isSharingCostNeedRevision = true;\r\n            }\r\n\r\n            // calculate valid amount and converted amount\r\n            var validAmount = 0;\r\n            var validConvertedAmount = 0;\r\n            if(req.accrue_trx_type === \"Reverse\") {\r\n                validAmount = trxSharingCost.remaining_budget_mcx.origin_amount - trxSharingCost.currency.origin_amount;\r\n                validConvertedAmount = trxSharingCost.remaining_budget_mcx.convertion_amount - trxSharingCost.currency.convertion_amount;\r\n            } else if(req.accrue_trx_type === \"Topup\") {\r\n                validAmount = trxSharingCost.remaining_budget_mcx.origin_amount + trxSharingCost.currency.origin_amount;\r\n                validConvertedAmount = trxSharingCost.remaining_budget_mcx.convertion_amount + trxSharingCost.currency.convertion_amount;\r\n            }\r\n            _log({\r\n                \"validAmount\": validAmount,\r\n                \"validConvertedAmount\": validConvertedAmount,\r\n                \"trxAmount\": sharingCost.currency.origin_amount,\r\n                \"trxConvertedAmount\": sharingCost.amount,\r\n            });\r\n\r\n            // check amount\r\n            var isAmountInvalid = sharingCost.currency.origin_amount != validAmount;\r\n            var isConvertedAmountInvalid = sharingCost.amount != validConvertedAmount;\r\n            if((!isSharingCostNeedRevision) && (isAmountInvalid || isConvertedAmountInvalid)) {\r\n                isSharingCostNeedRevision = true;\r\n            }\r\n\r\n            if(isSharingCostNeedRevision) { // push invalid sharing cost to need revision\r\n                needRevisionSharingCostIds.push(sharingCost.id);\r\n            }\r\n        }\r\n    }\r\n});",
+            "conditional": {
+                "query": "",
+                "action_true": null,
+                "action_false": null
+            },
+            "while": {
+                "variable_source": "",
+                "action_while": null,
+                "action_done": null
+            },
+            "external_api": {
+                "method": "",
+                "url": "",
+                "body": "",
+                "header": null
+            },
+            "send_notification": {
+                "user_company_ids": "",
+                "apps": "",
+                "type": "",
+                "heading": "",
+                "content": "",
+                "is_custom_redirect": false,
+                "script_redirect": "",
+                "variable_redirect": ""
+            },
+            "sum_formdata": {
+                "filter": null,
+                "column": ""
+            },
+            "data_connection": {
+                "query": "",
+                "connection": "",
+                "do": ""
+            },
+            "job": {
+                "name": "",
+                "input": ""
+            },
+            "dedicated_job": {
+                "name": "",
+                "input": "",
+                "counter_variable": ""
+            },
+            "function": {
+                "name": "",
+                "input": ""
+            },
+            "timeout_millisecond": 0,
+            "is_disable_log": false
+        },
+        {
+            "id": "vqSWAn7vR",
+            "type": "conditional",
+            "tablegroup_id": "",
+            "form_data_id": "",
+            "filter": null,
+            "new_filter": null,
+            "sort": null,
+            "page": "",
+            "is_async": false,
+            "is_disable": false,
+            "limit": "",
+            "data": null,
+            "form_data": null,
+            "container_variable": "",
+            "compress_file_base64": null,
+            "compress_file_multiple_url": null,
+            "compress_file_company_drive": null,
+            "javascript": "",
+            "conditional": {
+                "query": "regenerateBudgetLog.length > 0",
+                "action_true": [
+                    {
+                        "id": "9e8GIn7vg",
+                        "type": "create_records",
+                        "tablegroup_id": "GXDAU9IVR",
+                        "form_data_id": "4R_Ufhv4R",
+                        "filter": {},
+                        "new_filter": null,
+                        "sort": {},
+                        "page": "",
+                        "is_async": false,
+                        "is_disable": false,
+                        "limit": "",
+                        "data": {},
+                        "form_data": {
+                            "input": "regenerateBudgetLog",
+                            "is_disable_audit_trail": false
+                        },
+                        "container_variable": "regenerateMissingBudgetLogs",
+                        "compress_file_base64": null,
+                        "compress_file_multiple_url": null,
+                        "compress_file_company_drive": null,
+                        "javascript": "",
+                        "conditional": {
+                            "query": "",
+                            "action_true": null,
+                            "action_false": null
+                        },
+                        "while": {
+                            "variable_source": "",
+                            "action_while": null,
+                            "action_done": null
+                        },
+                        "external_api": {
+                            "method": "",
+                            "url": "",
+                            "body": "",
+                            "header": null
+                        },
+                        "send_notification": {
+                            "user_company_ids": "",
+                            "apps": "",
+                            "type": "",
+                            "heading": "",
+                            "content": "",
+                            "is_custom_redirect": false,
+                            "script_redirect": "",
+                            "variable_redirect": ""
+                        },
+                        "sum_formdata": {
+                            "filter": null,
+                            "column": ""
+                        },
+                        "data_connection": {
+                            "query": "",
+                            "connection": "",
+                            "do": ""
+                        },
+                        "job": {
+                            "name": "",
+                            "input": ""
+                        },
+                        "dedicated_job": {
+                            "name": "",
+                            "input": "",
+                            "counter_variable": ""
+                        },
+                        "function": {
+                            "name": "",
+                            "input": ""
+                        },
+                        "timeout_millisecond": 0,
+                        "is_disable_log": false
+                    }
+                ],
+                "action_false": []
+            },
+            "while": {
+                "variable_source": "",
+                "action_while": null,
+                "action_done": null
+            },
+            "external_api": {
+                "method": "",
+                "url": "",
+                "body": "",
+                "header": null
+            },
+            "send_notification": {
+                "user_company_ids": "",
+                "apps": "",
+                "type": "",
+                "heading": "",
+                "content": "",
+                "is_custom_redirect": false,
+                "script_redirect": "",
+                "variable_redirect": ""
+            },
+            "sum_formdata": {
+                "filter": null,
+                "column": ""
+            },
+            "data_connection": {
+                "query": "",
+                "connection": "",
+                "do": ""
+            },
+            "job": {
+                "name": "",
+                "input": ""
+            },
+            "dedicated_job": {
+                "name": "",
+                "input": "",
+                "counter_variable": ""
+            },
+            "function": {
+                "name": "",
+                "input": ""
+            },
+            "timeout_millisecond": 0,
+            "is_disable_log": false
+        },
+        {
+            "id": "UfgfM7nvg",
+            "type": "update_record",
+            "tablegroup_id": "GXDAU9IVR",
+            "form_data_id": "4R_Ufhv4R",
+            "filter": {
+                "accrue_monitoring_id.id": "req.accrue_monitoring.id",
+                "id_key": "budgetLogRefId"
+            },
+            "new_filter": null,
+            "sort": {},
+            "page": "",
+            "is_async": false,
+            "is_disable": false,
+            "limit": "",
+            "data": {
+                "accrue_monitoring_id": "",
+                "accrue_sub_ledger": "",
+                "amount": "",
+                "approved_by": "",
+                "budget_log": "",
+                "budget_remaining": "",
+                "consumed_option": "",
+                "costcenter_id": "",
+                "created_at": "",
+                "created_by": "",
+                "description": "",
+                "error_type": "",
+                "expense_sub_ledger": "",
+                "flag": "\"Verified\"",
+                "flow_status": "",
+                "id_accrue_monitoring_budget_log": "",
+                "id_key": "",
+                "initiator": "",
+                "log_activity": "",
+                "origin_currency": "",
+                "rc_code_owner": "",
+                "request_no": "",
+                "title": "",
+                "transaction_amount": "",
+                "transaction_amount_mcx": "",
+                "transaction_amount_ppn": "",
+                "transaction_date": "",
+                "transaction_type": "",
+                "updated_at": "",
+                "updated_by": ""
+            },
+            "form_data": null,
+            "container_variable": "setBudgetLogsToVerifiedByDefault",
+            "compress_file_base64": null,
+            "compress_file_multiple_url": null,
+            "compress_file_company_drive": null,
+            "javascript": "",
+            "conditional": {
+                "query": "",
+                "action_true": null,
+                "action_false": null
+            },
+            "while": {
+                "variable_source": "",
+                "action_while": null,
+                "action_done": null
+            },
+            "external_api": {
+                "method": "",
+                "url": "",
+                "body": "",
+                "header": null
+            },
+            "send_notification": {
+                "user_company_ids": "",
+                "apps": "",
+                "type": "",
+                "heading": "",
+                "content": "",
+                "is_custom_redirect": false,
+                "script_redirect": "",
+                "variable_redirect": ""
+            },
+            "sum_formdata": {
+                "filter": null,
+                "column": ""
+            },
+            "data_connection": {
+                "query": "",
+                "connection": "",
+                "do": ""
+            },
+            "job": {
+                "name": "",
+                "input": ""
+            },
+            "dedicated_job": {
+                "name": "",
+                "input": "",
+                "counter_variable": ""
+            },
+            "function": {
+                "name": "",
+                "input": ""
+            },
+            "timeout_millisecond": 0,
+            "is_disable_log": false
+        },
+        {
+            "id": "6Bv847nvR",
+            "type": "while",
+            "tablegroup_id": "",
+            "form_data_id": "",
+            "filter": null,
+            "new_filter": null,
+            "sort": null,
+            "page": "",
+            "is_async": false,
+            "is_disable": false,
+            "limit": "",
+            "data": null,
+            "form_data": null,
+            "container_variable": "needRevisionBudgetLogId",
+            "compress_file_base64": null,
+            "compress_file_multiple_url": null,
+            "compress_file_company_drive": null,
+            "javascript": "",
+            "conditional": {
+                "query": "",
+                "action_true": null,
+                "action_false": null
+            },
+            "while": {
+                "variable_source": "needRevisionBudgetLogIds",
+                "action_while": [
+                    {
+                        "id": "q7HXV77Dg",
+                        "type": "update_record",
+                        "tablegroup_id": "GXDAU9IVR",
+                        "form_data_id": "4R_Ufhv4R",
+                        "filter": {
+                            "id_accrue_monitoring_budget_log": "needRevisionBudgetLogId"
+                        },
+                        "new_filter": null,
+                        "sort": {},
+                        "page": "",
+                        "is_async": false,
+                        "is_disable": false,
+                        "limit": "",
+                        "data": {
+                            "accrue_monitoring_id": "",
+                            "accrue_sub_ledger": "",
+                            "amount": "",
+                            "approved_by": "",
+                            "budget_log": "",
+                            "budget_remaining": "",
+                            "consumed_option": "",
+                            "costcenter_id": "",
+                            "created_at": "",
+                            "created_by": "",
+                            "description": "",
+                            "error_type": "1",
+                            "expense_sub_ledger": "",
+                            "flag": "\"Need Revision\"",
+                            "flow_status": "",
+                            "id_accrue_monitoring_budget_log": "",
+                            "id_key": "",
+                            "initiator": "",
+                            "log_activity": "",
+                            "origin_currency": "",
+                            "rc_code_owner": "",
+                            "request_no": "",
+                            "title": "",
+                            "transaction_amount": "",
+                            "transaction_amount_mcx": "",
+                            "transaction_amount_ppn": "",
+                            "transaction_date": "",
+                            "transaction_type": "",
+                            "updated_at": "",
+                            "updated_by": ""
+                        },
+                        "form_data": null,
+                        "container_variable": "setBudgetLogToNeedRevision",
+                        "compress_file_base64": null,
+                        "compress_file_multiple_url": null,
+                        "compress_file_company_drive": null,
+                        "javascript": "",
+                        "conditional": {
+                            "query": "",
+                            "action_true": null,
+                            "action_false": null
+                        },
+                        "while": {
+                            "variable_source": "",
+                            "action_while": null,
+                            "action_done": null
+                        },
+                        "external_api": {
+                            "method": "",
+                            "url": "",
+                            "body": "",
+                            "header": null
+                        },
+                        "send_notification": {
+                            "user_company_ids": "",
+                            "apps": "",
+                            "type": "",
+                            "heading": "",
+                            "content": "",
+                            "is_custom_redirect": false,
+                            "script_redirect": "",
+                            "variable_redirect": ""
+                        },
+                        "sum_formdata": {
+                            "filter": null,
+                            "column": ""
+                        },
+                        "data_connection": {
+                            "query": "",
+                            "connection": "",
+                            "do": ""
+                        },
+                        "job": {
+                            "name": "",
+                            "input": ""
+                        },
+                        "dedicated_job": {
+                            "name": "",
+                            "input": "",
+                            "counter_variable": ""
+                        },
+                        "function": {
+                            "name": "",
+                            "input": ""
+                        },
+                        "timeout_millisecond": 0,
+                        "is_disable_log": false
+                    }
+                ],
+                "action_done": []
+            },
+            "external_api": {
+                "method": "",
+                "url": "",
+                "body": "",
+                "header": null
+            },
+            "send_notification": {
+                "user_company_ids": "",
+                "apps": "",
+                "type": "",
+                "heading": "",
+                "content": "",
+                "is_custom_redirect": false,
+                "script_redirect": "",
+                "variable_redirect": ""
+            },
+            "sum_formdata": {
+                "filter": null,
+                "column": ""
+            },
+            "data_connection": {
+                "query": "",
+                "connection": "",
+                "do": ""
+            },
+            "job": {
+                "name": "",
+                "input": ""
+            },
+            "dedicated_job": {
+                "name": "",
+                "input": "",
+                "counter_variable": ""
+            },
+            "function": {
+                "name": "",
+                "input": ""
+            },
+            "timeout_millisecond": 0,
+            "is_disable_log": false
+        },
+        {
+            "id": "nrGr477vg",
+            "type": "while",
+            "tablegroup_id": "",
+            "form_data_id": "",
+            "filter": null,
+            "new_filter": null,
+            "sort": null,
+            "page": "",
+            "is_async": false,
+            "is_disable": false,
+            "limit": "",
+            "data": null,
+            "form_data": null,
+            "container_variable": "duplicateBudgetLogId",
+            "compress_file_base64": null,
+            "compress_file_multiple_url": null,
+            "compress_file_company_drive": null,
+            "javascript": "",
+            "conditional": {
+                "query": "",
+                "action_true": null,
+                "action_false": null
+            },
+            "while": {
+                "variable_source": "duplicateBudgetLogIds",
+                "action_while": [
+                    {
+                        "id": "_zNq4nnDg",
+                        "type": "update_record",
+                        "tablegroup_id": "GXDAU9IVR",
+                        "form_data_id": "4R_Ufhv4R",
+                        "filter": {
+                            "id_accrue_monitoring_budget_log": "duplicateBudgetLogId"
+                        },
+                        "new_filter": null,
+                        "sort": {},
+                        "page": "",
+                        "is_async": false,
+                        "is_disable": false,
+                        "limit": "",
+                        "data": {
+                            "accrue_monitoring_id": "",
+                            "accrue_sub_ledger": "",
+                            "amount": "",
+                            "approved_by": "",
+                            "budget_log": "",
+                            "budget_remaining": "",
+                            "consumed_option": "",
+                            "costcenter_id": "",
+                            "created_at": "",
+                            "created_by": "",
+                            "description": "",
+                            "error_type": "2",
+                            "expense_sub_ledger": "",
+                            "flag": "\"Duplicate Data\"",
+                            "flow_status": "",
+                            "id_accrue_monitoring_budget_log": "",
+                            "id_key": "",
+                            "initiator": "",
+                            "log_activity": "",
+                            "origin_currency": "",
+                            "rc_code_owner": "",
+                            "request_no": "",
+                            "title": "",
+                            "transaction_amount": "",
+                            "transaction_amount_mcx": "",
+                            "transaction_amount_ppn": "",
+                            "transaction_date": "",
+                            "transaction_type": "",
+                            "updated_at": "",
+                            "updated_by": ""
+                        },
+                        "form_data": null,
+                        "container_variable": "setBudgetLogToDuplicated",
+                        "compress_file_base64": null,
+                        "compress_file_multiple_url": null,
+                        "compress_file_company_drive": null,
+                        "javascript": "",
+                        "conditional": {
+                            "query": "",
+                            "action_true": null,
+                            "action_false": null
+                        },
+                        "while": {
+                            "variable_source": "",
+                            "action_while": null,
+                            "action_done": null
+                        },
+                        "external_api": {
+                            "method": "",
+                            "url": "",
+                            "body": "",
+                            "header": null
+                        },
+                        "send_notification": {
+                            "user_company_ids": "",
+                            "apps": "",
+                            "type": "",
+                            "heading": "",
+                            "content": "",
+                            "is_custom_redirect": false,
+                            "script_redirect": "",
+                            "variable_redirect": ""
+                        },
+                        "sum_formdata": {
+                            "filter": null,
+                            "column": ""
+                        },
+                        "data_connection": {
+                            "query": "",
+                            "connection": "",
+                            "do": ""
+                        },
+                        "job": {
+                            "name": "",
+                            "input": ""
+                        },
+                        "dedicated_job": {
+                            "name": "",
+                            "input": "",
+                            "counter_variable": ""
+                        },
+                        "function": {
+                            "name": "",
+                            "input": ""
+                        },
+                        "timeout_millisecond": 0,
+                        "is_disable_log": false
+                    }
+                ],
+                "action_done": []
+            },
+            "external_api": {
+                "method": "",
+                "url": "",
+                "body": "",
+                "header": null
+            },
+            "send_notification": {
+                "user_company_ids": "",
+                "apps": "",
+                "type": "",
+                "heading": "",
+                "content": "",
+                "is_custom_redirect": false,
+                "script_redirect": "",
+                "variable_redirect": ""
+            },
+            "sum_formdata": {
+                "filter": null,
+                "column": ""
+            },
+            "data_connection": {
+                "query": "",
+                "connection": "",
+                "do": ""
+            },
+            "job": {
+                "name": "",
+                "input": ""
+            },
+            "dedicated_job": {
+                "name": "",
+                "input": "",
+                "counter_variable": ""
+            },
+            "function": {
+                "name": "",
+                "input": ""
+            },
+            "timeout_millisecond": 0,
+            "is_disable_log": false
+        },
+        {
+            "id": "cJBdEI7vg",
+            "type": "conditional",
+            "tablegroup_id": "",
+            "form_data_id": "",
+            "filter": null,
+            "new_filter": null,
+            "sort": null,
+            "page": "",
+            "is_async": false,
+            "is_disable": false,
+            "limit": "",
+            "data": null,
+            "form_data": null,
+            "container_variable": "",
+            "compress_file_base64": null,
+            "compress_file_multiple_url": null,
+            "compress_file_company_drive": null,
+            "javascript": "",
+            "conditional": {
+                "query": "req.is_trigger_activate",
+                "action_true": [
+                    {
+                        "id": "qcUnLSnvR",
+                        "type": "conditional",
+                        "tablegroup_id": "",
+                        "form_data_id": "",
+                        "filter": null,
+                        "new_filter": null,
+                        "sort": null,
+                        "page": "",
+                        "is_async": false,
+                        "is_disable": false,
+                        "limit": "",
+                        "data": null,
+                        "form_data": null,
+                        "container_variable": "",
+                        "compress_file_base64": null,
+                        "compress_file_multiple_url": null,
+                        "compress_file_company_drive": null,
+                        "javascript": "",
+                        "conditional": {
+                            "query": "regenerateSharingCost.length > 0",
+                            "action_true": [
+                                {
+                                    "id": "EtatYSnDR",
+                                    "type": "create_records",
+                                    "tablegroup_id": "GXDAU9IVR",
+                                    "form_data_id": "mrlgy-D4g",
+                                    "filter": {},
+                                    "new_filter": null,
+                                    "sort": {},
+                                    "page": "",
+                                    "is_async": false,
+                                    "is_disable": false,
+                                    "limit": "",
+                                    "data": {},
+                                    "form_data": {
+                                        "input": "regenerateSharingCost",
+                                        "is_disable_audit_trail": false
+                                    },
+                                    "container_variable": "regenerateMissingSharingCosts",
+                                    "compress_file_base64": null,
+                                    "compress_file_multiple_url": null,
+                                    "compress_file_company_drive": null,
+                                    "javascript": "",
+                                    "conditional": {
+                                        "query": "",
+                                        "action_true": null,
+                                        "action_false": null
+                                    },
+                                    "while": {
+                                        "variable_source": "",
+                                        "action_while": null,
+                                        "action_done": null
+                                    },
+                                    "external_api": {
+                                        "method": "",
+                                        "url": "",
+                                        "body": "",
+                                        "header": null
+                                    },
+                                    "send_notification": {
+                                        "user_company_ids": "",
+                                        "apps": "",
+                                        "type": "",
+                                        "heading": "",
+                                        "content": "",
+                                        "is_custom_redirect": false,
+                                        "script_redirect": "",
+                                        "variable_redirect": ""
+                                    },
+                                    "sum_formdata": {
+                                        "filter": null,
+                                        "column": ""
+                                    },
+                                    "data_connection": {
+                                        "query": "",
+                                        "connection": "",
+                                        "do": ""
+                                    },
+                                    "job": {
+                                        "name": "",
+                                        "input": ""
+                                    },
+                                    "dedicated_job": {
+                                        "name": "",
+                                        "input": "",
+                                        "counter_variable": ""
+                                    },
+                                    "function": {
+                                        "name": "",
+                                        "input": ""
+                                    },
+                                    "timeout_millisecond": 0,
+                                    "is_disable_log": false
+                                }
+                            ],
+                            "action_false": []
+                        },
+                        "while": {
+                            "variable_source": "",
+                            "action_while": null,
+                            "action_done": null
+                        },
+                        "external_api": {
+                            "method": "",
+                            "url": "",
+                            "body": "",
+                            "header": null
+                        },
+                        "send_notification": {
+                            "user_company_ids": "",
+                            "apps": "",
+                            "type": "",
+                            "heading": "",
+                            "content": "",
+                            "is_custom_redirect": false,
+                            "script_redirect": "",
+                            "variable_redirect": ""
+                        },
+                        "sum_formdata": {
+                            "filter": null,
+                            "column": ""
+                        },
+                        "data_connection": {
+                            "query": "",
+                            "connection": "",
+                            "do": ""
+                        },
+                        "job": {
+                            "name": "",
+                            "input": ""
+                        },
+                        "dedicated_job": {
+                            "name": "",
+                            "input": "",
+                            "counter_variable": ""
+                        },
+                        "function": {
+                            "name": "",
+                            "input": ""
+                        },
+                        "timeout_millisecond": 0,
+                        "is_disable_log": false
+                    },
+                    {
+                        "id": "I3MHYI7vR",
+                        "type": "update_record",
+                        "tablegroup_id": "GXDAU9IVR",
+                        "form_data_id": "mrlgy-D4g",
+                        "filter": {
+                            "accrue_monitoring_id.id": "req.accrue_monitoring.id"
+                        },
+                        "new_filter": null,
+                        "sort": {},
+                        "page": "",
+                        "is_async": false,
+                        "is_disable": false,
+                        "limit": "",
+                        "data": {
+                            "accrue_code": "",
+                            "accrue_monitoring_id": "",
+                            "accrue_sub_ledger": "",
+                            "amount": "",
+                            "amount_origin": "",
+                            "approved_by": "",
+                            "created_at": "",
+                            "created_by": "",
+                            "currency": "",
+                            "description": "",
+                            "dibuat_oleh": "",
+                            "error_type": "",
+                            "exchange_rate": "",
+                            "expense_rc_code": "",
+                            "expense_sub_ledger": "",
+                            "flag": "\"Verified\"",
+                            "flow_status": "",
+                            "id_accrue_monitoring_sharing_cost": "",
+                            "id_key": "",
+                            "origin_currency": "",
+                            "rc_code_owner": "",
+                            "remaninig_budget": "",
+                            "target_currency": "",
+                            "title": "",
+                            "updated_at": "",
+                            "updated_by": ""
+                        },
+                        "form_data": null,
+                        "container_variable": "setSharingCostsToVerifiedByDefault",
+                        "compress_file_base64": null,
+                        "compress_file_multiple_url": null,
+                        "compress_file_company_drive": null,
+                        "javascript": "",
+                        "conditional": {
+                            "query": "",
+                            "action_true": null,
+                            "action_false": null
+                        },
+                        "while": {
+                            "variable_source": "",
+                            "action_while": null,
+                            "action_done": null
+                        },
+                        "external_api": {
+                            "method": "",
+                            "url": "",
+                            "body": "",
+                            "header": null
+                        },
+                        "send_notification": {
+                            "user_company_ids": "",
+                            "apps": "",
+                            "type": "",
+                            "heading": "",
+                            "content": "",
+                            "is_custom_redirect": false,
+                            "script_redirect": "",
+                            "variable_redirect": ""
+                        },
+                        "sum_formdata": {
+                            "filter": null,
+                            "column": ""
+                        },
+                        "data_connection": {
+                            "query": "",
+                            "connection": "",
+                            "do": ""
+                        },
+                        "job": {
+                            "name": "",
+                            "input": ""
+                        },
+                        "dedicated_job": {
+                            "name": "",
+                            "input": "",
+                            "counter_variable": ""
+                        },
+                        "function": {
+                            "name": "",
+                            "input": ""
+                        },
+                        "timeout_millisecond": 0,
+                        "is_disable_log": false
+                    },
+                    {
+                        "id": "sZAfLS7vR",
+                        "type": "while",
+                        "tablegroup_id": "",
+                        "form_data_id": "",
+                        "filter": null,
+                        "new_filter": null,
+                        "sort": null,
+                        "page": "",
+                        "is_async": false,
+                        "is_disable": false,
+                        "limit": "",
+                        "data": null,
+                        "form_data": null,
+                        "container_variable": "needRevisionSharingCostId",
+                        "compress_file_base64": null,
+                        "compress_file_multiple_url": null,
+                        "compress_file_company_drive": null,
+                        "javascript": "",
+                        "conditional": {
+                            "query": "",
+                            "action_true": null,
+                            "action_false": null
+                        },
+                        "while": {
+                            "variable_source": "needRevisionSharingCostIds",
+                            "action_while": [
+                                {
+                                    "id": "zMilLI7DR",
+                                    "type": "update_record",
+                                    "tablegroup_id": "GXDAU9IVR",
+                                    "form_data_id": "mrlgy-D4g",
+                                    "filter": {
+                                        "id_accrue_monitoring_sharing_cost": "needRevisionSharingCostId"
+                                    },
+                                    "new_filter": null,
+                                    "sort": {},
+                                    "page": "",
+                                    "is_async": false,
+                                    "is_disable": false,
+                                    "limit": "",
+                                    "data": {
+                                        "accrue_code": "",
+                                        "accrue_monitoring_id": "",
+                                        "accrue_sub_ledger": "",
+                                        "amount": "",
+                                        "amount_origin": "",
+                                        "approved_by": "",
+                                        "created_at": "",
+                                        "created_by": "",
+                                        "currency": "",
+                                        "description": "",
+                                        "dibuat_oleh": "",
+                                        "error_type": "1",
+                                        "exchange_rate": "",
+                                        "expense_rc_code": "",
+                                        "expense_sub_ledger": "",
+                                        "flag": "\"Need Revision\"",
+                                        "flow_status": "",
+                                        "id_accrue_monitoring_sharing_cost": "",
+                                        "id_key": "",
+                                        "origin_currency": "",
+                                        "rc_code_owner": "",
+                                        "remaninig_budget": "",
+                                        "target_currency": "",
+                                        "title": "",
+                                        "updated_at": "",
+                                        "updated_by": ""
+                                    },
+                                    "form_data": null,
+                                    "container_variable": "setSharingCostToNeedRevision",
+                                    "compress_file_base64": null,
+                                    "compress_file_multiple_url": null,
+                                    "compress_file_company_drive": null,
+                                    "javascript": "",
+                                    "conditional": {
+                                        "query": "",
+                                        "action_true": null,
+                                        "action_false": null
+                                    },
+                                    "while": {
+                                        "variable_source": "",
+                                        "action_while": null,
+                                        "action_done": null
+                                    },
+                                    "external_api": {
+                                        "method": "",
+                                        "url": "",
+                                        "body": "",
+                                        "header": null
+                                    },
+                                    "send_notification": {
+                                        "user_company_ids": "",
+                                        "apps": "",
+                                        "type": "",
+                                        "heading": "",
+                                        "content": "",
+                                        "is_custom_redirect": false,
+                                        "script_redirect": "",
+                                        "variable_redirect": ""
+                                    },
+                                    "sum_formdata": {
+                                        "filter": null,
+                                        "column": ""
+                                    },
+                                    "data_connection": {
+                                        "query": "",
+                                        "connection": "",
+                                        "do": ""
+                                    },
+                                    "job": {
+                                        "name": "",
+                                        "input": ""
+                                    },
+                                    "dedicated_job": {
+                                        "name": "",
+                                        "input": "",
+                                        "counter_variable": ""
+                                    },
+                                    "function": {
+                                        "name": "",
+                                        "input": ""
+                                    },
+                                    "timeout_millisecond": 0,
+                                    "is_disable_log": false
+                                }
+                            ],
+                            "action_done": []
+                        },
+                        "external_api": {
+                            "method": "",
+                            "url": "",
+                            "body": "",
+                            "header": null
+                        },
+                        "send_notification": {
+                            "user_company_ids": "",
+                            "apps": "",
+                            "type": "",
+                            "heading": "",
+                            "content": "",
+                            "is_custom_redirect": false,
+                            "script_redirect": "",
+                            "variable_redirect": ""
+                        },
+                        "sum_formdata": {
+                            "filter": null,
+                            "column": ""
+                        },
+                        "data_connection": {
+                            "query": "",
+                            "connection": "",
+                            "do": ""
+                        },
+                        "job": {
+                            "name": "",
+                            "input": ""
+                        },
+                        "dedicated_job": {
+                            "name": "",
+                            "input": "",
+                            "counter_variable": ""
+                        },
+                        "function": {
+                            "name": "",
+                            "input": ""
+                        },
+                        "timeout_millisecond": 0,
+                        "is_disable_log": false
+                    },
+                    {
+                        "id": "aiAXYInDg",
+                        "type": "while",
+                        "tablegroup_id": "",
+                        "form_data_id": "",
+                        "filter": null,
+                        "new_filter": null,
+                        "sort": null,
+                        "page": "",
+                        "is_async": false,
+                        "is_disable": false,
+                        "limit": "",
+                        "data": null,
+                        "form_data": null,
+                        "container_variable": "duplicateMonitoringSharingCostId",
+                        "compress_file_base64": null,
+                        "compress_file_multiple_url": null,
+                        "compress_file_company_drive": null,
+                        "javascript": "",
+                        "conditional": {
+                            "query": "",
+                            "action_true": null,
+                            "action_false": null
+                        },
+                        "while": {
+                            "variable_source": "duplicateMonitoringSharingCostIds",
+                            "action_while": [
+                                {
+                                    "id": "m0g6YInDg",
+                                    "type": "update_record",
+                                    "tablegroup_id": "GXDAU9IVR",
+                                    "form_data_id": "mrlgy-D4g",
+                                    "filter": {
+                                        "id_accrue_monitoring_sharing_cost": "duplicateMonitoringSharingCostId"
+                                    },
+                                    "new_filter": null,
+                                    "sort": {},
+                                    "page": "",
+                                    "is_async": false,
+                                    "is_disable": false,
+                                    "limit": "",
+                                    "data": {
+                                        "accrue_code": "",
+                                        "accrue_monitoring_id": "",
+                                        "accrue_sub_ledger": "",
+                                        "amount": "",
+                                        "amount_origin": "",
+                                        "approved_by": "",
+                                        "created_at": "",
+                                        "created_by": "",
+                                        "currency": "",
+                                        "description": "",
+                                        "dibuat_oleh": "",
+                                        "error_type": "2",
+                                        "exchange_rate": "",
+                                        "expense_rc_code": "",
+                                        "expense_sub_ledger": "",
+                                        "flag": "\"Duplicate Data\"",
+                                        "flow_status": "",
+                                        "id_accrue_monitoring_sharing_cost": "",
+                                        "id_key": "",
+                                        "origin_currency": "",
+                                        "rc_code_owner": "",
+                                        "remaninig_budget": "",
+                                        "target_currency": "",
+                                        "title": "",
+                                        "updated_at": "",
+                                        "updated_by": ""
+                                    },
+                                    "form_data": null,
+                                    "container_variable": "setSharingCostToDuplicated",
+                                    "compress_file_base64": null,
+                                    "compress_file_multiple_url": null,
+                                    "compress_file_company_drive": null,
+                                    "javascript": "",
+                                    "conditional": {
+                                        "query": "",
+                                        "action_true": null,
+                                        "action_false": null
+                                    },
+                                    "while": {
+                                        "variable_source": "",
+                                        "action_while": null,
+                                        "action_done": null
+                                    },
+                                    "external_api": {
+                                        "method": "",
+                                        "url": "",
+                                        "body": "",
+                                        "header": null
+                                    },
+                                    "send_notification": {
+                                        "user_company_ids": "",
+                                        "apps": "",
+                                        "type": "",
+                                        "heading": "",
+                                        "content": "",
+                                        "is_custom_redirect": false,
+                                        "script_redirect": "",
+                                        "variable_redirect": ""
+                                    },
+                                    "sum_formdata": {
+                                        "filter": null,
+                                        "column": ""
+                                    },
+                                    "data_connection": {
+                                        "query": "",
+                                        "connection": "",
+                                        "do": ""
+                                    },
+                                    "job": {
+                                        "name": "",
+                                        "input": ""
+                                    },
+                                    "dedicated_job": {
+                                        "name": "",
+                                        "input": "",
+                                        "counter_variable": ""
+                                    },
+                                    "function": {
+                                        "name": "",
+                                        "input": ""
+                                    },
+                                    "timeout_millisecond": 0,
+                                    "is_disable_log": false
+                                }
+                            ],
+                            "action_done": []
+                        },
+                        "external_api": {
+                            "method": "",
+                            "url": "",
+                            "body": "",
+                            "header": null
+                        },
+                        "send_notification": {
+                            "user_company_ids": "",
+                            "apps": "",
+                            "type": "",
+                            "heading": "",
+                            "content": "",
+                            "is_custom_redirect": false,
+                            "script_redirect": "",
+                            "variable_redirect": ""
+                        },
+                        "sum_formdata": {
+                            "filter": null,
+                            "column": ""
+                        },
+                        "data_connection": {
+                            "query": "",
+                            "connection": "",
+                            "do": ""
+                        },
+                        "job": {
+                            "name": "",
+                            "input": ""
+                        },
+                        "dedicated_job": {
+                            "name": "",
+                            "input": "",
+                            "counter_variable": ""
+                        },
+                        "function": {
+                            "name": "",
+                            "input": ""
+                        },
+                        "timeout_millisecond": 0,
+                        "is_disable_log": false
+                    }
+                ],
+                "action_false": []
+            },
+            "while": {
+                "variable_source": "",
+                "action_while": null,
+                "action_done": null
+            },
+            "external_api": {
+                "method": "",
+                "url": "",
+                "body": "",
+                "header": null
+            },
+            "send_notification": {
+                "user_company_ids": "",
+                "apps": "",
+                "type": "",
+                "heading": "",
+                "content": "",
+                "is_custom_redirect": false,
+                "script_redirect": "",
+                "variable_redirect": ""
+            },
+            "sum_formdata": {
+                "filter": null,
+                "column": ""
+            },
+            "data_connection": {
+                "query": "",
+                "connection": "",
+                "do": ""
+            },
+            "job": {
+                "name": "",
+                "input": ""
+            },
+            "dedicated_job": {
+                "name": "",
+                "input": "",
+                "counter_variable": ""
+            },
+            "function": {
+                "name": "",
+                "input": ""
+            },
+            "timeout_millisecond": 0,
+            "is_disable_log": false
+        }
+    ],
+    "company_id": 25236,
+    "user_company_id": 188784,
+    "created_by": 188784,
+    "updated_by": 188784,
+    "created_at": 1766297624064,
+    "updated_at": 1766559149588,
+    "version": 0,
+    "is_stored_to_eventsam": true,
+    "is_deleted": false,
+    "created_by_person": {
+        "company_user_id": 188784,
+        "email": "syekh.maulana@mekari.com",
+        "first_name": "Syekh",
+        "last_name": "Maulana",
+        "name": "Syekh Maulana",
+        "photo": ""
+    },
+    "updated_by_person": {
+        "company_user_id": 188784,
+        "email": "syekh.maulana@mekari.com",
+        "first_name": "Syekh",
+        "last_name": "Maulana",
+        "name": "Syekh Maulana",
+        "photo": ""
+    }
+}

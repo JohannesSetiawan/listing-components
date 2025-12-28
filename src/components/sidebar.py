@@ -16,7 +16,8 @@ def render_sidebar():
                 "📊 Master List",
                 "⚙️ Visual Programming",
                 "🎨 Experience Manager",
-                "💾 Data Manager"
+                "💾 Data Manager",
+                "🔗 Find DM Links"
             ]
         )
         

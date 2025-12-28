@@ -5,6 +5,7 @@ from src.models.component import Category
 from src.components.sidebar import render_sidebar
 from src.components.component_list import render_component_list
 from src.pages.home import render_home
+from src.pages.find_dm_links import render_find_dm_links
 
 # Configure the page
 st.set_page_config(
@@ -41,6 +42,9 @@ def main():
     
     elif page == "💾 Data Manager":
         render_component_list(category=Category.DM, title="💾 Data Manager Components")
+    
+    elif page == "🔗 Find DM Links":
+        render_find_dm_links()
 
 if __name__ == "__main__":
     main()
