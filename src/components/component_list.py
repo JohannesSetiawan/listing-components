@@ -98,7 +98,8 @@ def render_component_list(category=None, title="All Components"):
                 "Category": comp.category.value if category is None else "",
                 "Change": change_badge,
                 "Description": comp.description if comp.description else "",
-                "UID": comp.uid
+                "UID": comp.uid,
+                "_index": comp.uid
             })
         
         df = pd.DataFrame(data)
@@ -261,15 +262,24 @@ def render_component_list(category=None, title="All Components"):
         st.markdown("---")
         st.subheader("Component Details")
         
-        selected_name = st.selectbox(
-            "Select a component to view details",
-            options=[comp.name for comp in components],
-            index=0
-        )
+        # Create buttons for each component
+        st.markdown("**Click a component name to view details:**")
+        cols_per_row = 3
+        for i in range(0, len(components), cols_per_row):
+            cols = st.columns(cols_per_row)
+            for j, comp in enumerate(components[i:i+cols_per_row]):
+                with cols[j]:
+                    if st.button(f"📄 {comp.name}", key=f"detail_{comp.uid}", use_container_width=True):
+                        st.session_state.selected_component_uid = comp.uid
+                        st.rerun()
         
-        selected_comp = next((c for c in components if c.name == selected_name), None)
-        if selected_comp:
-            render_component_detail(selected_comp.uid)
+        # Show detail view if a component is selected
+        if st.session_state.get('selected_component_uid'):
+            st.markdown("---")
+            render_component_detail(st.session_state.selected_component_uid)
+            if st.button("❌ Close Detail View"):
+                st.session_state.selected_component_uid = None
+                st.rerun()
         
         # Pagination
         total_pages = (total + page_size - 1) // page_size
