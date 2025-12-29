@@ -36,37 +36,77 @@ def render_audit_trail():
     )
     
     st.markdown("---")
-    st.subheader("📋 Query Parameters")
     
-    col1, col2 = st.columns(2)
+    # Toggle between form input and custom JSON
+    use_custom_body = st.toggle(
+        "Use Custom Request Body",
+        value=False,
+        help="Enable to provide a custom JSON request body instead of using the form fields"
+    )
     
-    with col1:
-        form_data_id = st.text_input(
-            "Form Data ID",
-            placeholder="Enter form_data_id",
-            help="The form_data_id to query"
-        )
+    # Initialize variables
+    form_data_id = ""
+    record_id = ""
+    page_num = 1
+    limit = 500
+    sort_order = ("Descending (newest first)", -1)
+    custom_json_input = ""
     
-    with col2:
-        record_id = st.text_input(
-            "Record ID",
-            placeholder="Enter record_id",
-            help="The record_id to filter by"
-        )
-    
-    # Advanced options (collapsible)
-    with st.expander("⚙️ Advanced Options"):
-        adv_col1, adv_col2 = st.columns(2)
-        with adv_col1:
-            page_num = st.number_input("Page", min_value=1, value=1, help="Page number for pagination")
-        with adv_col2:
-            limit = st.number_input("Limit", min_value=1, max_value=1000, value=500, help="Number of records per page")
+    if use_custom_body:
+        # Custom JSON input mode
+        st.subheader("📝 Custom Request Body")
         
-        sort_order = st.selectbox(
-            "Sort Order (by timestamp)",
-            options=[("Descending (newest first)", -1), ("Ascending (oldest first)", 1)],
-            format_func=lambda x: x[0]
+        default_body = '''{
+    "form_data_id": "your_form_data_id",
+    "page": 1,
+    "limit": 500,
+    "sort": {
+        "timestamp": -1
+    },
+    "filter": {
+        "record_id": "your_record_id"
+    }
+}'''
+        
+        custom_json_input = st.text_area(
+            "Request Body (JSON)",
+            value=default_body,
+            height=250,
+            help="Enter your custom JSON request body"
         )
+    else:
+        # Form input mode
+        st.subheader("📋 Query Parameters")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            form_data_id = st.text_input(
+                "Form Data ID",
+                placeholder="Enter form_data_id",
+                help="The form_data_id to query"
+            )
+        
+        with col2:
+            record_id = st.text_input(
+                "Record ID",
+                placeholder="Enter record_id",
+                help="The record_id to filter by"
+            )
+        
+        # Advanced options (collapsible)
+        with st.expander("⚙️ Advanced Options"):
+            adv_col1, adv_col2 = st.columns(2)
+            with adv_col1:
+                page_num = st.number_input("Page", min_value=1, value=1, help="Page number for pagination")
+            with adv_col2:
+                limit = st.number_input("Limit", min_value=1, max_value=1000, value=500, help="Number of records per page")
+            
+            sort_order = st.selectbox(
+                "Sort Order (by timestamp)",
+                options=[("Descending (newest first)", -1), ("Ascending (oldest first)", 1)],
+                format_func=lambda x: x[0]
+            )
     
     st.markdown("---")
     
@@ -93,26 +133,35 @@ def render_audit_trail():
             st.error("Please enter the Authorization Token")
             return
         
-        if not form_data_id.strip():
-            st.error("Please enter the Form Data ID")
-            return
-        
-        if not record_id.strip():
-            st.error("Please enter the Record ID")
-            return
-        
-        # Build request body
-        request_body = {
-            "form_data_id": form_data_id.strip(),
-            "page": page_num,
-            "limit": limit,
-            "sort": {
-                "timestamp": sort_order[1]
-            },
-            "filter": {
-                "record_id": record_id.strip()
+        if use_custom_body:
+            # Parse custom JSON
+            try:
+                request_body = json.loads(custom_json_input)
+            except json.JSONDecodeError as e:
+                st.error(f"Invalid JSON in request body: {str(e)}")
+                return
+        else:
+            # Validate form fields
+            if not form_data_id.strip():
+                st.error("Please enter the Form Data ID")
+                return
+            
+            if not record_id.strip():
+                st.error("Please enter the Record ID")
+                return
+            
+            # Build request body from form
+            request_body = {
+                "form_data_id": form_data_id.strip(),
+                "page": page_num,
+                "limit": limit,
+                "sort": {
+                    "timestamp": sort_order[1]
+                },
+                "filter": {
+                    "record_id": record_id.strip()
+                }
             }
-        }
         
         # Build headers
         headers = {
