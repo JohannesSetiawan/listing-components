@@ -32,7 +32,7 @@ def render_audit_trail():
         "Authorization Token (JWT Bearer)",
         type="password",
         placeholder="Enter your JWT token",
-        help="This will be used as Bearer token in the Authorization header"
+        help="This will be used as Bearer token in the Authorization header. Get the token from the STUDIO not the app."
     )
     
     st.markdown("---")
