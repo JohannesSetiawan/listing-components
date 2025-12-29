@@ -224,10 +224,91 @@ def render_audit_trail():
         else:
             st.error(f"Status Code: {status_code}")
         
-        # Display response data
-        st.subheader("📄 Response Body")
-        
+        # Display readable audit trail data
         data = response_data["data"]
+        
+        if isinstance(data, dict) and "data" in data and isinstance(data["data"], list):
+            st.subheader("📋 Audit Trail Records")
+            
+            records = data["data"]
+            
+            if not records:
+                st.info("No audit trail records found.")
+            else:
+                st.write(f"**Total Records:** {len(records)}")
+                
+                for idx, record in enumerate(records):
+                    # Extract fields
+                    action = record.get("action", "N/A")
+                    new_data = record.get("new_data", {})
+                    old_data = record.get("old_data", {})
+                    timestamp = record.get("timestamp", "")
+                    name = record.get("name", "")
+                    email = record.get("email", "")
+                    
+                    # Get automation_id from new_data if exists
+                    automation_id = ""
+                    if isinstance(new_data, dict):
+                        automation_id = new_data.get("automation_id", "")
+                    
+                    # Truncate data for display
+                    new_data_str = json.dumps(new_data, ensure_ascii=False) if new_data else ""
+                    old_data_str = json.dumps(old_data, ensure_ascii=False) if old_data else ""
+                    new_data_truncated = (new_data_str[:200] + "...") if len(new_data_str) > 200 else new_data_str
+                    old_data_truncated = (old_data_str[:200] + "...") if len(old_data_str) > 200 else old_data_str
+                    
+                    # Format timestamp
+                    timestamp_display = ""
+                    if timestamp:
+                        from datetime import datetime
+                        try:
+                            # Assuming timestamp is in milliseconds
+                            dt = datetime.fromtimestamp(timestamp / 1000)
+                            timestamp_display = dt.strftime("%Y-%m-%d %H:%M:%S")
+                        except:
+                            timestamp_display = str(timestamp)
+                    
+                    # Create expander for each record
+                    with st.expander(f"**#{idx + 1}** | {action} | {timestamp_display} | {name}", expanded=False):
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.markdown(f"**Action:** `{action}`")
+                            st.markdown(f"**User:** {name}")
+                            st.markdown(f"**Email:** {email}")
+                        
+                        with col2:
+                            st.markdown(f"**Timestamp:** {timestamp_display}")
+                            st.markdown(f"**Automation ID:** `{automation_id if automation_id else 'N/A'}`")
+                        
+                        st.markdown("---")
+                        
+                        # New Data section
+                        st.markdown("**📥 New Data:**")
+                        st.text(new_data_truncated if new_data_truncated else "N/A")
+                        if new_data:
+                            if st.button(f"🔍 View Full New Data", key=f"new_data_{idx}"):
+                                st.session_state[f"show_new_data_{idx}"] = not st.session_state.get(f"show_new_data_{idx}", False)
+                            
+                            if st.session_state.get(f"show_new_data_{idx}", False):
+                                st.json(new_data)
+                        
+                        st.markdown("---")
+                        
+                        # Old Data section
+                        st.markdown("**📤 Old Data:**")
+                        st.text(old_data_truncated if old_data_truncated else "N/A")
+                        if old_data:
+                            if st.button(f"🔍 View Full Old Data", key=f"old_data_{idx}"):
+                                st.session_state[f"show_old_data_{idx}"] = not st.session_state.get(f"show_old_data_{idx}", False)
+                            
+                            if st.session_state.get(f"show_old_data_{idx}", False):
+                                st.json(old_data)
+            
+            st.markdown("---")
+        
+        # Display response data
+        st.subheader("📄 Raw Response Body")
         
         if isinstance(data, dict) or isinstance(data, list):
             # Pretty print JSON

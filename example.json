@@ -1,0 +1,27 @@
+{
+    "action":"UPDATE",
+    "additional_info":null,
+    "automation_id":"",
+    "columns":["flow_status","automation_id"],
+    "company_id":25236,
+    "email":"resa.sukma@mekari.com",
+    "first_name":"Resa",
+    "id":"UILGbfnvg",
+    "last_name":"Engineer",
+    "name":"Resa Engineer",
+    "new_data":{
+        "automation_id":"oA-uvGw4g",
+        "company_id":25236,
+        "flow_status":"unverified",
+        "id_report_cash_advance":"W2tY1BnvR",
+        "updated_at":1766902870263,
+        "updated_by":188781
+    },
+    "old_data":{
+        "_id":"6950ca62dc32643e3b75e67c","activity":{"id":"74ZOIkWIR","name":"PPX Perdin Domestik (Non Day Trip)"},"additional_info":{"jarak_tempuh_km":100,"jumlah_penumpang":4,"moda_transportasi":{"id":"m0GFORBNR","name":"Pesawat"},"perjalanan_pulang_pergi":{"id":"s0pwORBNgz","name":"YES"},"tiket_perjalananboarding_passevidence_informasi_jarak_titik_awal_dan_tujuan":[{"name":"-","url":"r6WMJfnDg"}],"titik_awal_nama_gedungstasiunbandara":"rumah aul","titik_tujuan_nama_gedungstasiunbandara":"rumah orang lain"},"amount":100000,"amount_origin":100000,"amount_staff":null,"approved_at":1766902335519,"approved_by_email":["testing.uat2@mailinator.com","direct_supervisor2@mailinator.com"],"approved_by_text":"testing.uat2@mailinator.com^direct_supervisor2@mailinator.com","attachment_receipt":"0hyi1BnDg","company_id":25236,"created_at":1766902370755,"created_by":202382,"currency":"IDR","description":"deskripsi panjang deskripsi panjang deskripsi panjang deskripsi panjang deskripsi panjang ","disbursed_at":1766902369894,"division":"2666","division_code":"1611-47077-3005","division_code_object":{"id":"I7fsk2ZIR","name":"1611-47077-3005"},"division_code_staff":null,"division_id_staff":null,"division_name_staff":null,"end_date":1767114000000,"exchange_rate":1,"flow_status":"verified","id":"W2tY1BnvR","id_cash_advance":"iUtG1B7DR","id_key":100,"id_key_activity":503,"id_key_subledger":1682,"id_report_cash_advance":"W2tY1BnvR","initiator_email":"maker_satu@mailinator.com","initiator_emp_code":"UAT12345610","initiator_emp_name":"Maker Satu","initiator_position":"3012499-Testing Accrue Konvensional","invoice_number":"28DEC2025CA100","parent_data_created_at":1766901814003,"position":{"id":"glQLpOgvg","name":"3012499-Testing Accrue Konvensional"},"project":{"id":"","name":""},"rejected_by":[],"rejected_by_email":[],"rejected_by_text":"","request_for":{"id":"wWErK86Ng","name":"Accrue Manager D3 - direct_supervisor "},"sharing_cost":"Non-Sharing Cost","staff":null,"start_date":1766854800000,"subledger":{"id":"p0dIl2ZSR","name":"1720454-5041-00000"},"submitted_at":1766901831695,"submitted_first_at":1766901831695,"title":"Cash Advanceee baruuuuuuu","total_amount_staff_tagging":0,"total_amount_staff_tagging_origin":0,"updated_at":1766902843009,"updated_by":202380
+        },
+        "photo":"",
+        "record_id":"W2tY1BnvR",
+        "timestamp":1766902870264,
+        "user_company_id":188781
+    }

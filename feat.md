@@ -1,18 +1,7 @@
-Create new feature called "Audit Trail" that works like below:
+On "Audit Trail" page, create new section ABOVE the response body JSON form that display the fetched data in a more readable version. The audit trail APi will always returns list of data in forms of JSON object (so the response body is in form of {"data":[{obj1}, {obj2}]}). 
 
-1. User input the audit trail URL, for example: https://<api>/v1/nocode/record/audit_trail (the format is not strict, no need to validate)
-2. User input the authorizzation token for authorization header using JWT bearer token. 
-3. User input the form_data_id and record_id.
-4. System makes POST request to that URL using auth header and the request body is like below:
-{
-    "form_data_id": "sdsdcsdsdc",
-    "page": 1,
-    "limit": 500,
-    "sort": {
-        "timestamp": -1
-    },
-    "filter": {
-        "record_id": "sdcddsd"
-    }
-}
-5. Returns the JSON response to the user in pretty form.
+An example of 1 item in the list is in file example.json. I want you for each list items to show the details of the information as below:
+1. the action that was made (from "action")
+2. The Automation ID (from "new_data".automation_id if existed, else empty string "")
+3. The updated data (from "new_data"). Make a pop up to show the full JSON in pretty mode. DO not show the full data in the list, truncate it to max 200 character
+4. The old data (from "old_data"). Make a pop up to show the full JSON in pretty mode. DO not show the full data in the list, truncate it to max 200 character
