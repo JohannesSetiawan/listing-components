@@ -269,7 +269,7 @@ def render_audit_trail():
                             timestamp_display = str(timestamp)
                     
                     # Create expander for each record
-                    with st.expander(f"**#{idx + 1}** | {action} | {timestamp_display} | {name}", expanded=False):
+                    with st.expander(f"**#{idx + 1}** | {action} | {timestamp_display} | {automation_id if automation_id else 'N/A'}", expanded=False):
                         col1, col2 = st.columns(2)
                         
                         with col1:
