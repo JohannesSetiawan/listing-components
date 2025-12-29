@@ -16,7 +16,8 @@ def render_sidebar():
                 "⚙️ Visual Programming",
                 "🎨 Experience Manager",
                 "💾 Data Manager",
-                "🔗 Find DM Links"
+                "🔗 Find DM Links",
+                "📜 Audit Trail"
             ]
         )
         

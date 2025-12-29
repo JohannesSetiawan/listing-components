@@ -6,6 +6,7 @@ from src.components.sidebar import render_sidebar
 from src.components.component_list import render_component_list
 from src.pages.home import render_home
 from src.pages.find_dm_links import render_find_dm_links
+from src.pages.audit_trail import render_audit_trail
 
 # Configure the page
 st.set_page_config(
@@ -45,6 +46,9 @@ def main():
     
     elif page == "🔗 Find DM Links":
         render_find_dm_links()
+    
+    elif page == "📜 Audit Trail":
+        render_audit_trail()
 
 if __name__ == "__main__":
     main()
