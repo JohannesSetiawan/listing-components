@@ -4,7 +4,136 @@ import streamlit as st
 import requests
 import json
 import xml.dom.minidom
+import re
 from src.utils.database import db
+
+
+def prettify_html(html_string):
+    """
+    Pretty format HTML with proper indentation.
+    Uses a simple regex-based approach without external dependencies.
+    """
+    # Remove existing excessive whitespace
+    html_string = re.sub(r'>\s+<', '><', html_string.strip())
+    
+    # Self-closing tags and void elements
+    void_elements = {'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 
+                     'link', 'meta', 'param', 'source', 'track', 'wbr'}
+    
+    result = []
+    indent = 0
+    indent_str = "  "
+    
+    # Split by tags while keeping the tags
+    parts = re.split(r'(<[^>]+>)', html_string)
+    
+    for part in parts:
+        if not part.strip():
+            continue
+            
+        # Check if it's a tag
+        if part.startswith('<'):
+            tag_match = re.match(r'<(/?)(\w+)', part)
+            if tag_match:
+                is_closing = tag_match.group(1) == '/'
+                tag_name = tag_match.group(2).lower()
+                
+                # Check for self-closing or void elements
+                is_self_closing = part.endswith('/>') or tag_name in void_elements
+                
+                if is_closing:
+                    indent = max(0, indent - 1)
+                    result.append(indent_str * indent + part)
+                elif is_self_closing:
+                    result.append(indent_str * indent + part)
+                else:
+                    result.append(indent_str * indent + part)
+                    indent += 1
+            else:
+                # Comments, doctypes, etc.
+                result.append(indent_str * indent + part)
+        else:
+            # Text content
+            text = part.strip()
+            if text:
+                result.append(indent_str * max(0, indent) + text)
+    
+    return '\n'.join(result)
+
+
+def prettify_xml(xml_string):
+    """
+    Pretty format XML with proper indentation.
+    Falls back to regex-based approach if minidom fails.
+    """
+    try:
+        # First try xml.dom.minidom
+        dom = xml.dom.minidom.parseString(xml_string.encode('utf-8'))
+        pretty = dom.toprettyxml(indent="  ")
+        # Remove extra blank lines that minidom adds
+        lines = [line for line in pretty.split('\n') if line.strip()]
+        return '\n'.join(lines)
+    except Exception:
+        # Fallback to simple regex-based formatting
+        xml_string = re.sub(r'>\s+<', '><', xml_string.strip())
+        
+        result = []
+        indent = 0
+        indent_str = "  "
+        
+        parts = re.split(r'(<[^>]+>)', xml_string)
+        
+        for part in parts:
+            if not part.strip():
+                continue
+                
+            if part.startswith('</'):
+                indent = max(0, indent - 1)
+                result.append(indent_str * indent + part)
+            elif part.startswith('<?') or part.startswith('<!'):
+                result.append(indent_str * indent + part)
+            elif part.startswith('<') and part.endswith('/>'):
+                result.append(indent_str * indent + part)
+            elif part.startswith('<'):
+                result.append(indent_str * indent + part)
+                indent += 1
+            else:
+                text = part.strip()
+                if text:
+                    result.append(indent_str * max(0, indent) + text)
+        
+        return '\n'.join(result)
+
+
+def is_html_content(body, content_type):
+    """
+    Detect if the response body is HTML content.
+    """
+    # Check content type header
+    if "text/html" in content_type or "application/xhtml" in content_type:
+        return True
+    
+    # Check for HTML indicators in the body
+    body_lower = body.strip().lower()
+    html_indicators = [
+        '<!doctype html',
+        '<html',
+        '<head',
+        '<body',
+        '<div',
+        '<span',
+        '<p>',
+        '<h1',
+        '<h2',
+        '<h3',
+        '<script',
+        '<style',
+        '<meta',
+        '<link',
+        '<title'
+    ]
+    
+    return any(indicator in body_lower for indicator in html_indicators)
 
 
 def render_api_client_detail():
@@ -567,35 +696,51 @@ def render_response():
         content_type = response["headers"].get("Content-Type", "").lower()
         body = response["body"]
         
+        # Detect content type for formatting
+        is_json = "application/json" in content_type or body.strip().startswith(("{", "["))
+        is_xml = ("xml" in content_type or 
+                  body.strip().startswith("<?xml") or 
+                  (body.strip().startswith("<") and not body.strip().startswith("<!DOCTYPE") and not is_html_content(body, content_type)))
+        is_html = is_html_content(body, content_type)
+        
         # View mode selector
         view_mode = st.radio(
             "View Mode",
-            options=["Pretty", "Raw"],
+            options=["Pretty", "Raw", "Preview"] if is_html else ["Pretty", "Raw"],
             horizontal=True,
             label_visibility="collapsed"
         )
         
         if view_mode == "Pretty":
-            if "application/json" in content_type or body.strip().startswith(("{", "[")):
+            if is_json:
                 try:
                     parsed_json = json.loads(body)
                     st.json(parsed_json)
                 except json.JSONDecodeError:
                     st.code(body, language="text")
             
-            elif "xml" in content_type or body.strip().startswith("<?xml") or body.strip().startswith("<"):
+            elif is_xml:
                 try:
-                    dom = xml.dom.minidom.parseString(body)
-                    pretty_xml = dom.toprettyxml(indent="  ")
+                    pretty_xml = prettify_xml(body)
                     st.code(pretty_xml, language="xml")
-                except:
+                except Exception:
                     st.code(body, language="xml")
             
-            elif "html" in content_type:
-                st.code(body, language="html")
+            elif is_html:
+                try:
+                    pretty_html = prettify_html(body)
+                    st.code(pretty_html, language="html")
+                except Exception:
+                    st.code(body, language="html")
             
             else:
                 st.code(body, language="text")
+        
+        elif view_mode == "Preview" and is_html:
+            # Render HTML preview in an iframe-like container
+            st.markdown("**HTML Preview:**")
+            st.components.v1.html(body, height=500, scrolling=True)
+        
         else:
             st.code(body, language="text")
         
