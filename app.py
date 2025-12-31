@@ -7,6 +7,8 @@ from src.components.component_list import render_component_list
 from src.pages.home import render_home
 from src.pages.find_dm_links import render_find_dm_links
 from src.pages.audit_trail import render_audit_trail
+from src.pages.api_client_list import render_api_client_list
+from src.pages.api_client_detail import render_api_client_detail
 
 # Configure the page
 st.set_page_config(
@@ -49,6 +51,12 @@ def main():
     
     elif page == "📜 Audit Trail":
         render_audit_trail()
+    
+    elif page == "📡 API Client - List":
+        render_api_client_list()
+    
+    elif page == "📡 API Client - Detail":
+        render_api_client_detail()
 
 if __name__ == "__main__":
     main()
