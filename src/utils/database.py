@@ -3,7 +3,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
-from src.models.component import Base, Component, Category, ChangeType
+from src.models.component import Base, Component, Category, ChangeType, ApiRequest
 from src.config import get_database_url
 
 class Database:
@@ -93,6 +93,79 @@ class Database:
                 Component.category == category
             ).distinct().all()
             return [t[0] for t in types]
+        finally:
+            session.close()
+    
+    # API Request methods
+    def create_api_request(self, request_data):
+        """Create a new API request"""
+        session = self.get_session()
+        try:
+            api_request = ApiRequest(**request_data)
+            session.add(api_request)
+            session.commit()
+            session.refresh(api_request)
+            return api_request
+        finally:
+            session.close()
+    
+    def get_all_api_requests(self, search=None, method=None, limit=50, offset=0):
+        """Get all API requests with optional filters"""
+        session = self.get_session()
+        try:
+            query = session.query(ApiRequest)
+            
+            if method:
+                query = query.filter(ApiRequest.method == method)
+            
+            if search:
+                query = query.filter(
+                    (ApiRequest.name.contains(search)) | 
+                    (ApiRequest.description.contains(search)) |
+                    (ApiRequest.url.contains(search))
+                )
+            
+            total = query.count()
+            requests = query.order_by(ApiRequest.updated_at.desc()).limit(limit).offset(offset).all()
+            
+            return requests, total
+        finally:
+            session.close()
+    
+    def get_api_request_by_uid(self, uid):
+        """Get a single API request by UID"""
+        session = self.get_session()
+        try:
+            return session.query(ApiRequest).filter(ApiRequest.uid == uid).first()
+        finally:
+            session.close()
+    
+    def update_api_request(self, uid, update_data):
+        """Update an existing API request"""
+        session = self.get_session()
+        try:
+            api_request = session.query(ApiRequest).filter(ApiRequest.uid == uid).first()
+            if api_request:
+                for key, value in update_data.items():
+                    setattr(api_request, key, value)
+                api_request.updated_at = datetime.utcnow()
+                session.commit()
+                session.refresh(api_request)
+                return api_request
+            return None
+        finally:
+            session.close()
+    
+    def delete_api_request(self, uid):
+        """Delete an API request"""
+        session = self.get_session()
+        try:
+            api_request = session.query(ApiRequest).filter(ApiRequest.uid == uid).first()
+            if api_request:
+                session.delete(api_request)
+                session.commit()
+                return True
+            return False
         finally:
             session.close()
 
