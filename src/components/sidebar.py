@@ -8,9 +8,6 @@ def render_sidebar():
     with st.sidebar:
         st.title("📋 Navigation")
         
-        # Get selected page from session state if exists
-        default_page = st.session_state.get('selected_page', "🏠 Home")
-        
         pages = [
             "🏠 Home",
             "📊 Master List",
@@ -23,19 +20,25 @@ def render_sidebar():
             "📡 API Client - Detail"
         ]
         
-        # Get the index of the default page
-        try:
-            default_index = pages.index(default_page)
-        except ValueError:
-            default_index = 0
+        # Initialize selected_page in session state if not exists
+        if 'selected_page' not in st.session_state:
+            st.session_state.selected_page = "🏠 Home"
         
+        # Get the index of the current selected page
+        try:
+            current_index = pages.index(st.session_state.selected_page)
+        except ValueError:
+            current_index = 0
+        
+        # Use key parameter to sync with session state
         page = st.radio(
             "Go to",
             pages,
-            index=default_index
+            index=current_index,
+            key="nav_radio"
         )
         
-        # Update session state
+        # Update session state when user selects from radio
         st.session_state.selected_page = page
         
         st.markdown("---")
