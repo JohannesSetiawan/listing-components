@@ -16,25 +16,24 @@ def render_sidebar():
             "💾 Data Manager",
             "🔗 Find DM Links",
             "📜 Audit Trail",
-            "📡 API Client - List",
-            "📡 API Client - Detail"
+            "📡 API Client"
         ]
         
         # Initialize selected_page in session state if not exists
         if 'selected_page' not in st.session_state:
             st.session_state.selected_page = "🏠 Home"
         
-        # Get the index of the current selected page
-        try:
-            current_index = pages.index(st.session_state.selected_page)
-        except ValueError:
-            current_index = 0
+        # Sync the radio key with selected_page to handle programmatic navigation
+        if 'nav_radio' not in st.session_state:
+            st.session_state.nav_radio = st.session_state.selected_page
+        elif st.session_state.nav_radio != st.session_state.selected_page:
+            # Programmatic navigation occurred, update the radio state
+            st.session_state.nav_radio = st.session_state.selected_page
         
         # Use key parameter to sync with session state
         page = st.radio(
             "Go to",
             pages,
-            index=current_index,
             key="nav_radio"
         )
         
