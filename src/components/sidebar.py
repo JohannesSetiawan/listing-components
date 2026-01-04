@@ -16,8 +16,7 @@ def render_sidebar():
             "💾 Data Manager",
             "🔗 Find DM Links",
             "📜 Audit Trail",
-            "📡 API Client - List",
-            "📡 API Client - Detail"
+            "📡 API Client"
         ]
         
         # Initialize selected_page in session state if not exists

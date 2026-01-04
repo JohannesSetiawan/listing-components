@@ -1,10 +1,11 @@
-"""API Client Detail page - Make custom API requests like Postman"""
+"""API Client page - Make custom API requests like Postman with saved requests list"""
 
 import streamlit as st
 import requests
 import json
 import xml.dom.minidom
 import re
+from datetime import datetime
 from src.utils.database import db
 
 
@@ -136,8 +137,8 @@ def is_html_content(body, content_type):
     return any(indicator in body_lower for indicator in html_indicators)
 
 
-def render_api_client_detail():
-    """Render the API Client Detail page"""
+def render_api_client_page():
+    """Render the combined API Client page with detail on top and list below"""
     st.title("📡 API Client")
     
     # Initialize session state
@@ -156,20 +157,28 @@ def render_api_client_detail():
         except Exception as e:
             st.error(f"Error loading saved request: {str(e)}")
     
-    # Navigation
-    col1, col2 = st.columns([1, 5])
-    with col1:
-        if st.button("⬅️ Back to List"):
-            st.session_state.api_client_selected_request = None
-            st.session_state.api_response = None
-            st.session_state.api_error = None
-            st.session_state.selected_page = "📡 API Client - List"
-            st.rerun()
+    # Detail header
+    detail_col1, detail_col2 = st.columns([1, 5])
+    with detail_col1:
+        if saved_request:
+            if st.button("➕ New Request"):
+                st.session_state.api_client_selected_request = None
+                st.session_state.api_response = None
+                st.session_state.api_error = None
+                # Clear session state for params/headers/form to load defaults
+                if 'api_params' in st.session_state:
+                    del st.session_state.api_params
+                if 'api_headers' in st.session_state:
+                    del st.session_state.api_headers
+                if 'api_form_data' in st.session_state:
+                    del st.session_state.api_form_data
+                st.rerun()
     
-    if saved_request:
-        st.markdown(f"**Editing:** {saved_request.name}")
-    else:
-        st.markdown("**New Request**")
+    with detail_col2:
+        if saved_request:
+            st.markdown(f"**Editing:** {saved_request.name}")
+        else:
+            st.markdown("**New Request**")
     
     st.markdown("---")
     
@@ -546,6 +555,9 @@ def render_api_client_detail():
     
     # Display response
     render_response()
+    
+    # Render the saved requests list below
+    render_saved_requests_list()
 
 
 def execute_request(method, url, params, headers, auth_config, body_type, body_content):
@@ -754,3 +766,124 @@ def render_response():
         
         for key, value in headers_data.items():
             st.markdown(f"**{key}:** `{value}`")
+
+
+def render_saved_requests_list():
+    """Render the saved requests list section"""
+    st.markdown("---")
+    st.subheader("📂 Saved Requests")
+    
+    # Search and filter
+    search_col1, search_col2 = st.columns([2, 1])
+    
+    with search_col1:
+        search_query = st.text_input(
+            "🔍 Search",
+            placeholder="Search by name, URL, or description...",
+            label_visibility="collapsed",
+            key="search_saved_requests"
+        )
+    
+    with search_col2:
+        method_filter = st.selectbox(
+            "Filter by Method",
+            options=["All", "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+            label_visibility="collapsed",
+            key="filter_saved_requests"
+        )
+    
+    # Get saved requests from database
+    try:
+        method_to_filter = None if method_filter == "All" else method_filter
+        requests_list, total = db.get_all_api_requests(
+            search=search_query if search_query else None,
+            method=method_to_filter
+        )
+        
+        if not requests_list:
+            st.info("No saved requests found. Create a new request above and save it.")
+            return
+        
+        st.write(f"**Total:** {total} request(s)")
+        st.markdown("---")
+        
+        # Display requests as cards
+        for req in requests_list:
+            render_request_card(req)
+            
+    except Exception as e:
+        st.error(f"Error loading requests: {str(e)}")
+
+
+def render_request_card(req):
+    """Render a single request card"""
+    method_colors = {
+        "GET": "🟢",
+        "POST": "🟡",
+        "PUT": "🟠",
+        "PATCH": "🟣",
+        "DELETE": "🔴",
+        "HEAD": "⚪",
+        "OPTIONS": "🔵"
+    }
+    
+    method_emoji = method_colors.get(req.method, "⚫")
+    
+    with st.container():
+        col1, col2, col3 = st.columns([3, 1, 1])
+        
+        with col1:
+            st.markdown(f"### {method_emoji} **{req.name}**")
+            st.markdown(f"`{req.method}` | {req.url[:80]}{'...' if len(req.url) > 80 else ''}")
+            if req.description:
+                st.caption(req.description[:100] + ('...' if len(req.description) > 100 else ''))
+        
+        with col2:
+            st.caption(f"Updated: {req.updated_at.strftime('%Y-%m-%d %H:%M') if req.updated_at else 'N/A'}")
+        
+        with col3:
+            btn_col1, btn_col2 = st.columns(2)
+            
+            with btn_col1:
+                if st.button("📂 Open", key=f"open_{req.uid}"):
+                    st.session_state.api_client_selected_request = req.uid
+                    st.session_state.api_response = None
+                    st.session_state.api_error = None
+                    # Clear session state for params/headers/form to load from saved request
+                    if 'api_params' in st.session_state:
+                        del st.session_state.api_params
+                    if 'api_headers' in st.session_state:
+                        del st.session_state.api_headers
+                    if 'api_form_data' in st.session_state:
+                        del st.session_state.api_form_data
+                    st.rerun()
+            
+            with btn_col2:
+                if st.button("🗑️", key=f"delete_{req.uid}"):
+                    st.session_state.confirm_delete_request = req.uid
+                    st.rerun()
+        
+        # Confirm delete dialog
+        if st.session_state.get('confirm_delete_request') == req.uid:
+            st.warning(f"Are you sure you want to delete '{req.name}'?")
+            confirm_col1, confirm_col2, confirm_col3 = st.columns([1, 1, 3])
+            
+            with confirm_col1:
+                if st.button("✅ Yes, Delete", key=f"confirm_del_{req.uid}"):
+                    try:
+                        db.delete_api_request(req.uid)
+                        st.session_state.confirm_delete_request = None
+                        # Clear selection if deleted request was selected
+                        if st.session_state.api_client_selected_request == req.uid:
+                            st.session_state.api_client_selected_request = None
+                        st.success("Request deleted!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error deleting request: {str(e)}")
+            
+            with confirm_col2:
+                if st.button("❌ Cancel", key=f"cancel_del_{req.uid}"):
+                    st.session_state.confirm_delete_request = None
+                    st.rerun()
+        
+        st.markdown("---")
