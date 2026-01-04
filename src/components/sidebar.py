@@ -31,6 +31,13 @@ def render_sidebar():
             else:
                 st.session_state.selected_page = "🏠 Home"
         
+        # Also fix nav_radio if it has old/invalid values
+        if 'nav_radio' in st.session_state and st.session_state.nav_radio not in pages:
+            if st.session_state.nav_radio in ["📡 API Client - List", "📡 API Client - Detail"]:
+                st.session_state.nav_radio = "📡 API Client"
+            else:
+                st.session_state.nav_radio = st.session_state.selected_page
+        
         # Sync the radio key with selected_page to handle programmatic navigation
         if 'nav_radio' not in st.session_state:
             st.session_state.nav_radio = st.session_state.selected_page
