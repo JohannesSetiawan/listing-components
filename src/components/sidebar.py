@@ -23,6 +23,14 @@ def render_sidebar():
         if 'selected_page' not in st.session_state:
             st.session_state.selected_page = "🏠 Home"
         
+        # Handle migration from old page names and invalid pages
+        if st.session_state.selected_page not in pages:
+            # Map old page names to new ones
+            if st.session_state.selected_page in ["📡 API Client - List", "📡 API Client - Detail"]:
+                st.session_state.selected_page = "📡 API Client"
+            else:
+                st.session_state.selected_page = "🏠 Home"
+        
         # Sync the radio key with selected_page to handle programmatic navigation
         if 'nav_radio' not in st.session_state:
             st.session_state.nav_radio = st.session_state.selected_page
